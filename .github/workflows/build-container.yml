@@ -5,11 +5,11 @@ on:
     inputs:
       context:
         description: "Container build context"
-        type: path
+        type: string
         default: "."
       container-file:
         description: "Path to the container file"
-        type: path
+        type: string
         default: "./Dockerfile"
       repository:
         description: "Repository name"
