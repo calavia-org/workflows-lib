@@ -1,0 +1,13 @@
+{
+    "name": "Build Container Workflow",
+    "description": "Build container workflow. By default it will build a container image using the Dockerfile in the root of the repository.",
+    "icon": "https://raw.githubusercontent.com/oci-ux/design-system/main/icons/oci-icon.svg",
+    "categories": [
+        "Containers",
+        "DevOps",
+        "CI/CD" 
+    ],
+    "filePatterns": [
+        "^Dockerfile"
+    ]
+}
