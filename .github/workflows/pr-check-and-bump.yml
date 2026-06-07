@@ -232,7 +232,7 @@ jobs:
 
       - name: Bump version using custom action
         id: bump
-        uses: calavia-org/bump-version-action@v1
+        uses: calavia-org/bump-version-action@v0
         with:
           version-file: ${{ inputs.version-file }}
           bump-type: ${{ needs.check-pr.outputs.bump_type }}
