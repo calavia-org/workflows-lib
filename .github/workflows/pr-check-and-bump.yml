@@ -1,0 +1,272 @@
+name: PR Check and Auto-Bump
+
+on:
+  workflow_call:
+    inputs:
+      allowed-branch-pattern:
+        description: "Regex pattern for allowed branch names (optional, set empty to disable)"
+        type: string
+        default: "^(major|feat|fix|doc)/.+"
+      allowed-target-branches:
+        description: "Comma-separated list of allowed target branch patterns"
+        type: string
+        default: "main,release/*"
+      version-file:
+        description: "Path to version file (auto-detected if not set)"
+        type: string
+        default: "auto"
+      fail-on-invalid-branch:
+        description: "Fail workflow if branch name is invalid"
+        type: boolean
+        default: false
+      require-conventional-commits:
+        description: "Fail if no conventional commits found in PR"
+        type: boolean
+        default: true
+    secrets:
+      github-token:
+        description: "GitHub token with write permissions"
+        required: true
+
+jobs:
+  check-pr:
+    name: Check PR
+    runs-on: ubuntu-latest
+    outputs:
+      bump_type: ${{ steps.conventional.outputs.bump_type }}
+      has_conventional: ${{ steps.conventional.outputs.has_conventional }}
+      branch_valid: ${{ steps.validate-branch.outputs.valid }}
+      target_valid: ${{ steps.validate-target.outputs.valid }}
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Validate branch name
+        id: validate-branch
+        if: ${{ inputs.allowed-branch-pattern != '' }}
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          PATTERN="${{ inputs.allowed-branch-pattern }}"
+
+          if [ -z "$PATTERN" ]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "Branch name validation disabled"
+            exit 0
+          fi
+
+          if echo "$BRANCH" | grep -qE "$PATTERN"; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Branch name '$BRANCH' matches allowed pattern"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "❌ Branch name '$BRANCH' does NOT match pattern: $PATTERN"
+          fi
+
+      - name: Validate target branch
+        id: validate-target
+        run: |
+          TARGET="${{ github.base_ref }}"
+          ALLOWED="${{ inputs.allowed-target-branches }}"
+
+          # Convert comma-separated list to regex pattern
+          PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
+
+          if echo "$TARGET" | grep -qE "^($PATTERN)$"; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Target branch '$TARGET' is allowed"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "❌ Target branch '$TARGET' is NOT in allowed list: $ALLOWED"
+          fi
+
+      - name: Parse conventional commits
+        id: conventional
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          
+          # Get all commits in this PR
+          COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --pretty=format:"%s")
+          
+          echo "Commits in this PR:"
+          echo "$COMMITS"
+          echo ""
+          
+          BUMP_TYPE=""
+          HAS_CONVENTIONAL="false"
+          
+          while IFS= read -r commit; do
+            # Skip empty lines
+            [ -z "$commit" ] && continue
+            
+            # Check for breaking changes (highest priority)
+            if echo "$commit" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:|BREAKING-CHANGE:"; then
+              BUMP_TYPE="major"
+              HAS_CONVENTIONAL="true"
+              echo "Found breaking change in: $commit"
+              break  # Major is highest, no need to check further
+            fi
+            
+            # Check for features
+            if echo "$commit" | grep -qE "^feat(\(.+\))?:"; then
+              if [ "$BUMP_TYPE" != "major" ]; then
+                BUMP_TYPE="minor"
+              fi
+              HAS_CONVENTIONAL="true"
+              echo "Found feature in: $commit"
+            fi
+            
+            # Check for fixes
+            if echo "$commit" | grep -qE "^fix(\(.+\))?:"; then
+              if [ -z "$BUMP_TYPE" ]; then
+                BUMP_TYPE="patch"
+              fi
+              HAS_CONVENTIONAL="true"
+              echo "Found fix in: $commit"
+            fi
+            
+            # Check for other conventional types (chore, docs, refactor, etc.)
+            if echo "$commit" | grep -qE "^(chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
+              if [ -z "$BUMP_TYPE" ]; then
+                BUMP_TYPE="patch"
+              fi
+              HAS_CONVENTIONAL="true"
+              echo "Found conventional commit in: $commit"
+            fi
+          done <<< "$COMMITS"
+          
+          # If no conventional commits found, check PR title (for squash merges)
+          if [ "$HAS_CONVENTIONAL" = "false" ]; then
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            echo "No conventional commits found, checking PR title: $PR_TITLE"
+            
+            if echo "$PR_TITLE" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:"; then
+              BUMP_TYPE="major"
+              HAS_CONVENTIONAL="true"
+            elif echo "$PR_TITLE" | grep -qE "^feat(\(.+\))?:"; then
+              BUMP_TYPE="minor"
+              HAS_CONVENTIONAL="true"
+            elif echo "$PR_TITLE" | grep -qE "^(fix|chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
+              BUMP_TYPE="patch"
+              HAS_CONVENTIONAL="true"
+            fi
+          fi
+          
+          # Default to patch if nothing found and we don't require conventional
+          if [ -z "$BUMP_TYPE" ] && [ "${{ inputs.require-conventional-commits }}" = "false" ]; then
+            BUMP_TYPE="patch"
+            echo "No conventional commits found, defaulting to patch"
+          fi
+          
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "has_conventional=$HAS_CONVENTIONAL" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "Result: bump_type=$BUMP_TYPE, has_conventional=$HAS_CONVENTIONAL"
+
+      - name: Fail if branch name invalid
+        if: ${{ steps.validate-branch.outputs.valid == 'false' && inputs.fail-on-invalid-branch }}
+        run: |
+          echo "Branch name ${{ github.head_ref }} does not match required pattern: ${{ inputs.allowed-branch-pattern }}"
+          exit 1
+
+      - name: Fail if target branch invalid
+        if: ${{ steps.validate-target.outputs.valid == 'false' }}
+        run: |
+          echo "Target branch ${{ github.base_ref }} is not in allowed list: ${{ inputs.allowed-target-branches }}"
+          exit 1
+
+      - name: Fail if no conventional commits
+        if: ${{ steps.conventional.outputs.has_conventional == 'false' && inputs.require-conventional-commits }}
+        run: |
+          echo "❌ No conventional commits found in this PR"
+          echo ""
+          echo "Expected commit message format:"
+          echo "  fix: description       → patch bump"
+          echo "  feat: description      → minor bump"
+          echo "  feat!: description     → major bump"
+          echo "  BREAKING CHANGE: text  → major bump"
+          echo ""
+          echo "Since squash merge is enabled, ensure your PR title follows this format."
+          exit 1
+
+  auto-bump-version:
+    name: Auto-Bump Version
+    needs: check-pr
+    if: |
+      needs.check-pr.outputs.target_valid == 'true' &&
+      needs.check-pr.outputs.has_conventional == 'true' &&
+      needs.check-pr.outputs.bump_type != '' &&
+      needs.check-pr.outputs.bump_type != 'doc'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.github-token }}
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch base branch and tags
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          echo "Base branch: $BASE_BRANCH"
+          git fetch origin "$BASE_BRANCH" --tags
+
+      - name: Get latest tag from base branch
+        id: current
+        run: |
+          BASE_BRANCH="${{ github.base_ref }}"
+          LATEST_TAG=$(git describe --tags --abbrev=0 "origin/$BASE_BRANCH" 2>/dev/null || echo "0.0.0")
+          VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Latest tag on $BASE_BRANCH: $LATEST_TAG → base version: $VERSION"
+
+      - name: Bump version using custom action
+        id: bump
+        uses: calavia-org/bump-version-action@v1
+        with:
+          version-file: ${{ inputs.version-file }}
+          bump-type: ${{ needs.check-pr.outputs.bump_type }}
+          current-version: ${{ steps.current.outputs.version }}
+
+      - name: Check if changes exist
+        id: check
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version bump detected"
+          fi
+
+      - name: Check if last commit was already a version bump
+        id: last_commit
+        run: |
+          LAST_COMMIT=$(git log -1 --pretty=%B)
+          if echo "$LAST_COMMIT" | grep -q "chore: bump version"; then
+            echo "already_bumped=true" >> "$GITHUB_OUTPUT"
+            echo "Last commit was already a version bump, skipping"
+          else
+            echo "already_bumped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push version bump
+        if: steps.check.outputs.changed == 'true' && steps.last_commit.outputs.already_bumped == 'false'
+        run: |
+          FILE="${{ steps.bump.outputs.version-file }}"
+          NEW_VERSION="${{ steps.bump.outputs.new-version }}"
+          TYPE="${{ needs.check-pr.outputs.bump_type }}"
+
+          git add "$FILE"
+          git commit -m "chore: bump version to $NEW_VERSION ($TYPE)"
+          git push origin ${{ github.head_ref }}
