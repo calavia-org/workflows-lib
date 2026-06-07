@@ -1,6 +1,6 @@
 # Release Guide: Workflows Library
 
-This document describes how to release new versions of the `workflows-lib` repository.
+This document describes the release process for the `workflows-lib` repository.
 
 ## What This Repository Is
 
@@ -10,8 +10,8 @@ This repository is designed to grow. Currently it hosts:
 - `pr-check-and-bump.yml` — Validates PRs using conventional commits and auto-bumps versions
 
 Future workflows may include:
-- Container build and push workflows
-- Terraform plan and apply workflows
+- Container build and publish pipelines
+- Terraform infrastructure automation
 - Security scanning workflows
 - Documentation generation workflows
 
@@ -30,56 +30,23 @@ Validates PRs follow conventional commit format and automatically bumps version 
 **Dependencies:**
 - [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) — Composite action for technology-agnostic version bumping
 
-## Who Uses These Workflows
+## Release Process (Automated)
 
-| Consumer | Repository | Workflow Used |
-|----------|------------|---------------|
-| Ansible Collection | [`calavia-org/ansible-collection-setup`](https://github.com/calavia-org/ansible-collection-setup) | `pr-check-and-bump.yml` |
-| Future repos | Any org repo | Can use any published workflow |
+This repository uses an **automated release workflow** (`.github/workflows/release.yml`) that:
+1. Creates semantic version tags from conventional commits on push to `main`
+2. Updates the floating major version tag (`v1`, `v2`, etc.)
+3. Creates GitHub Releases with auto-generated notes
 
-## Release Steps
+**No manual tagging required.**
 
-### 1. Merge Changes to `main`
+### How It Works
 
-```bash
-git checkout main
-git pull origin main
-```
+When a PR is merged to `main` with a conventional commit message:
+- `fix:` → patch bump (e.g., `v1.0.0` → `v1.0.1`)
+- `feat:` → minor bump (e.g., `v1.0.0` → `v1.1.0`)
+- `feat!:` or `BREAKING CHANGE:` → major bump (e.g., `v1.0.0` → `v2.0.0`)
 
-### 2. Create a Semantic Version Tag
-
-```bash
-# For a new workflow or feature
-git tag -a v1.1.0 -m "Release v1.1.0: add new reusable workflow"
-
-# For a fix
-git tag -a v1.0.1 -m "Release v1.0.1: fix pr-check-and-bump condition"
-
-# For breaking changes
-git tag -a v2.0.0 -m "Release v2.0.0: rename workflow inputs"
-```
-
-### 3. Push the Tag
-
-```bash
-git push origin v1.1.0
-```
-
-### 4. Update the Floating Major Version Tag
-
-```bash
-# Delete old v1 tag locally and remotely
-git tag -d v1
-git push origin :refs/tags/v1
-
-# Recreate v1 pointing to the new release
-git tag -a v1 -m "Update v1 to v1.1.0"
-git push origin v1
-```
-
-This allows consumers to use `@v1` and automatically get non-breaking updates.
-
-## Versioning Strategy
+### Versioning Strategy
 
 | Version | Meaning | Consumer Impact |
 |---------|---------|----------------|
@@ -94,46 +61,46 @@ This allows consumers to use `@v1` and automatically get non-breaking updates.
 # Option 1: Floating major version (recommended)
 uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
 
-# Option 2: Specific version
+# Option 2: Specific version (for reproducibility)
 uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1.0.0
 
 # Option 3: Branch (not recommended for production)
 uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@main
 ```
 
-## Release Checklist
-
-- [ ] All workflows validated in a test repository
-- [ ] README.md updated with workflow descriptions
-- [ ] Changes don't break existing consumers (or consumers are notified)
-- [ ] Version tag created (`vX.Y.Z`)
-- [ ] Floating major tag updated (`vX`)
-- [ ] Consumer repos updated if breaking changes
-
 ## Post-Release Verification
 
-1. Check that `calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1` resolves to the new tag
-2. Verify a consumer workflow (e.g., in `ansible-collection-setup`) still works
-3. Test with a PR in a consumer repo to confirm the full flow (branch check → version bump)
+After the automated workflow runs:
+1. Check that the new tag appears in [releases](https://github.com/calavia-org/workflows-lib/releases)
+2. Verify the floating major tag (`v1`) points to the latest release
+3. Test with a PR in a consumer repo to confirm the workflow still works
 
 ## Breaking Changes Policy
 
 When introducing breaking changes:
-1. Create a new major version tag (`v2`)
+1. Use `BREAKING CHANGE:` in commit message or `feat!:` prefix → triggers major version bump
 2. Update `MIGRATION.md` in this repo with migration instructions
 3. Notify consumer repositories via issues or PRs
-4. Keep the old major version tag (`v1`) pointing to the last v1.x.x release until consumers migrate
+4. Consumers will need to update their references from `@v1` to `@v2`
 
-## Automation Options
+## Manual Release (Emergency Only)
 
-### Option A: Manual Tagging (Current)
-Create tags locally and push them.
+If the automated workflow fails, you can manually create a tag:
 
-### Option B: GitHub Actions Auto-Release
-Add a workflow that creates tags from conventional commits and updates the floating major tag automatically.
+```bash
+git checkout main
+git pull origin main
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
+```
 
-### Option C: Semantic Release
-Use `semantic-release` with conventional commits for fully automated versioning.
+Then update the floating major tag:
+```bash
+git tag -d v1
+git push origin :refs/tags/v1
+git tag -a v1 -m "Update v1 to v1.1.0"
+git push origin v1
+```
 
 ---
 
