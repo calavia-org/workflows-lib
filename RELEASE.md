@@ -6,22 +6,36 @@ This document describes how to release new versions of the `workflows-lib` repos
 
 A library of **reusable GitHub Actions workflows** (`workflow_call`) shared across the `calavia-org` organization.
 
-Current workflows:
-- `pr-check-and-bump.yml` — Validates PR branch names and auto-bumps versions
-- `build-container.yml` — Builds and pushes container images
+This repository is designed to grow. Currently it hosts:
+- `pr-check-and-bump.yml` — Validates PRs using conventional commits and auto-bumps versions
+
+Future workflows may include:
+- Container build and push workflows
+- Terraform plan and apply workflows
+- Security scanning workflows
+- Documentation generation workflows
+
+## Current Workflows
+
+### `pr-check-and-bump.yml`
+
+Validates PRs follow conventional commit format and automatically bumps version files based on semantic versioning.
+
+**Features:**
+- Conventional commit parsing (`fix:`, `feat:`, `BREAKING CHANGE:`)
+- Target branch validation (`main`, `release/*`)
+- Technology auto-detection (Ansible, Node.js, Python, Rust, Generic)
+- Supports maintenance releases from any target branch
+
+**Dependencies:**
+- [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) — Composite action for technology-agnostic version bumping
 
 ## Who Uses These Workflows
 
 | Consumer | Repository | Workflow Used |
 |----------|------------|---------------|
 | Ansible Collection | [`calavia-org/ansible-collection-setup`](https://github.com/calavia-org/ansible-collection-setup) | `pr-check-and-bump.yml` |
-| Base Template | [`calavia-org/base-template`](https://github.com/calavia-org/base-template) | Can use any workflow |
-
-## Dependencies
-
-| Dependency | Repository | Purpose |
-|------------|------------|---------|
-| Version bumping | [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) | Composite action used inside `pr-check-and-bump.yml` |
+| Future repos | Any org repo | Can use any published workflow |
 
 ## Release Steps
 
