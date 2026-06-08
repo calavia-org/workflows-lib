@@ -233,11 +233,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/detect-version
+      - uses: calavia-org/workflows-lib/.github/actions/detect-version@v0
         id: version
         with:
           version-source: ${{ inputs.version-source }}
-      - uses: ./.github/actions/detect-artifacts
+      - uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
         id: artifacts
 
   build-binary:
@@ -251,7 +251,7 @@ jobs:
       artifact-name: ${{ steps.build.outputs.artifact-name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/build-binary
+      - uses: calavia-org/workflows-lib/.github/actions/build-binary@v0
         id: build
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.binary-type }}
@@ -275,7 +275,7 @@ jobs:
       image-name: ${{ steps.build.outputs.image-name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/build-docker
+      - uses: calavia-org/workflows-lib/.github/actions/build-docker@v0
         id: build
         with:
           version: ${{ needs.detect.outputs.version }}
@@ -295,7 +295,7 @@ jobs:
       chart-name: ${{ steps.build.outputs.chart-name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/build-helm
+      - uses: calavia-org/workflows-lib/.github/actions/build-helm@v0
         id: build
         with:
           version: ${{ needs.detect.outputs.version }}
@@ -312,7 +312,7 @@ jobs:
     if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/sign-binary
+      - uses: calavia-org/workflows-lib/.github/actions/sign-binary@v0
         with:
           artifact-path: ${{ needs.build-binary.outputs.artifact-path }}
           gpg-key: ${{ secrets.gpg-key }}
@@ -326,7 +326,7 @@ jobs:
     if: ${{ inputs.sign-artifacts && inputs.sign-docker && contains(needs.detect.outputs.artifacts, 'docker') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/sign-docker
+      - uses: calavia-org/workflows-lib/.github/actions/sign-docker@v0
         with:
           image-tag: ${{ needs.build-docker.outputs.image-tag }}
           cosign-key: ${{ secrets.cosign-key }}
@@ -339,7 +339,7 @@ jobs:
     if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/sign-helm
+      - uses: calavia-org/workflows-lib/.github/actions/sign-helm@v0
         with:
           chart-path: ${{ needs.build-helm.outputs.chart-path }}
           gpg-key: ${{ secrets.gpg-key }}
@@ -356,12 +356,12 @@ jobs:
       release-id: ${{ steps.publish.outputs.release-id }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/generate-release-notes
+      - uses: calavia-org/workflows-lib/.github/actions/generate-release-notes@v0
         id: notes
         with:
           version: ${{ needs.detect.outputs.version }}
           since: ${{ inputs.changelog-since }}
-      - uses: ./.github/actions/publish-github-release
+      - uses: calavia-org/workflows-lib/.github/actions/publish-github-release@v0
         id: publish
         with:
           version: ${{ needs.detect.outputs.version }}
@@ -378,7 +378,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.publish-ghcr && always() && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') }}
     steps:
-      - uses: ./.github/actions/publish-ghcr
+      - uses: calavia-org/workflows-lib/.github/actions/publish-ghcr@v0
         with:
           image-tag: ${{ needs.build-docker.outputs.image-tag }}
           additional-tags: ${{ inputs.ghcr-tags }}
@@ -392,7 +392,7 @@ jobs:
     if: ${{ inputs.publish-package-manager && always() && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/publish-package
+      - uses: calavia-org/workflows-lib/.github/actions/publish-package@v0
         with:
           package-manager: ${{ inputs.package-manager }}
           artifact-path: ${{ needs.build-binary.outputs.artifact-path }}
@@ -408,7 +408,7 @@ jobs:
     if: ${{ inputs.publish-helm-chart && always() && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/publish-helm
+      - uses: calavia-org/workflows-lib/.github/actions/publish-helm@v0
         with:
           chart-path: ${{ needs.build-helm.outputs.chart-path }}
           chart-repo: ${{ inputs.helm-chart-repo }}
@@ -421,7 +421,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.rollback-on-failure && failure() }}
     steps:
-      - uses: ./.github/actions/rollback-release
+      - uses: calavia-org/workflows-lib/.github/actions/rollback-release@v0
         with:
           release-id: ${{ needs.publish-github-release.outputs.release-id }}
           image-tags: ${{ needs.build-docker.outputs.image-tag }}
