@@ -138,6 +138,7 @@ runs:
             if [ -n "${{ inputs.ansible-collection-path }}" ]; then
               cd "${{ inputs.ansible-collection-path }}"
             fi
+            pip install ansible ansible-builder
             ansible-galaxy collection build --force
             ARTIFACT_PATH=$(ls *.tar.gz | head -1)
             ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")

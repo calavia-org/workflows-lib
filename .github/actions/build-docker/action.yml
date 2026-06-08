@@ -1,5 +1,5 @@
 name: 'Build Docker'
-description: 'Builds Docker image using binary artifact'
+description: 'Builds Docker image or Ansible Execution Environment'
 inputs:
   version:
     description: 'Version to tag the image'
@@ -24,6 +24,14 @@ inputs:
     description: 'Additional tags (comma-separated)'
     required: false
     default: 'latest'
+  is-ansible-ee:
+    description: 'Build Ansible Execution Environment instead of standard Docker'
+    required: false
+    default: 'false'
+  ee-definition-file:
+    description: 'Path to execution-environment.yml'
+    required: false
+    default: 'execution-environment.yml'
 outputs:
   image-tag:
     description: 'Full image tag with version'
@@ -38,6 +46,11 @@ runs:
       with:
         name: ${{ inputs.binary-artifact }}
         path: ./artifact
+    - name: Setup Ansible Builder
+      if: inputs.is-ansible-ee == 'true'
+      shell: bash
+      run: |
+        pip install ansible-builder
     - name: Build Docker image
       id: build
       shell: bash
@@ -49,15 +62,20 @@ runs:
           IMAGE_NAME="${{ github.repository }}"
         fi
         
-        # Convert to lowercase and replace / with -
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
-        
         FULL_TAG="ghcr.io/$IMAGE_NAME:$VERSION"
         
-        # Build the image
-        docker build -f ${{ inputs.dockerfile-path }} -t "$FULL_TAG" ${{ inputs.build-context }}
+        if [ "${{ inputs.is-ansible-ee }}" == "true" ]; then
+          ansible-builder build \
+            --file ${{ inputs.ee-definition-file }} \
+            --context ./context \
+            --container-runtime docker \
+            --tag "$FULL_TAG" \
+            --tag "ghcr.io/$IMAGE_NAME:latest"
+        else
+          docker build -f ${{ inputs.dockerfile-path }} -t "$FULL_TAG" ${{ inputs.build-context }}
+        fi
         
-        # Tag additional tags
         IFS=',' read -ra TAGS <<< "${{ inputs.additional-tags }}"
         for tag in "${TAGS[@]}"; do
           tag=$(echo "$tag" | tr -d ' ')
@@ -70,4 +88,4 @@ runs:
         
         echo "image-tag=$FULL_TAG" >> "$GITHUB_OUTPUT"
         echo "image-name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
-        echo "✅ Built Docker image: $FULL_TAG"
+        echo "✅ Built image: $FULL_TAG"
