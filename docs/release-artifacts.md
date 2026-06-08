@@ -165,6 +165,19 @@ jobs:
       ghcr-image-name: my-app
 ```
 
+## Ansible-Specific Inputs
+
+| Input | Type | Default | Description |
+|-------|------|---------|-------------|
+| `ansible-collection-path` | string | `''` | Path to Ansible collection directory (e.g., `collections/ansible_collections/myorg/mycollection`) |
+| `is-ansible-ee` | boolean | `false` | Build Ansible Execution Environment instead of standard Docker image |
+| `ee-definition-file` | string | `'execution-environment.yml'` | Path to execution-environment.yml definition file |
+
+When `is-ansible-ee` is `true`:
+- The Docker build step uses `ansible-builder` instead of `docker build`
+- The EE image is built using the specified `execution-environment.yml`
+- The image is tagged with the version and pushed to GHCR
+
 ## Inputs
 
 See [`release-artifacts.yml`](.github/workflows/release-artifacts.yml) for all available inputs.
