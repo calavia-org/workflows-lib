@@ -23,6 +23,10 @@ on:
         description: "Fail if no conventional commits found in PR"
         type: boolean
         default: true
+      no-bump-branch-pattern:
+        description: "Regex pattern for branches that should skip version bump (optional)"
+        type: string
+        default: ""
     secrets:
       github-token:
         description: "GitHub token with write permissions"
@@ -37,12 +41,33 @@ jobs:
       has_conventional: ${{ steps.conventional.outputs.has_conventional }}
       branch_valid: ${{ steps.validate-branch.outputs.valid }}
       target_valid: ${{ steps.validate-target.outputs.valid }}
+      should_bump: ${{ steps.check-no-bump.outputs.should_bump }}
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+
+      - name: Check no-bump branch pattern
+        id: check-no-bump
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          PATTERN="${{ inputs.no-bump-branch-pattern }}"
+
+          if [ -z "$PATTERN" ]; then
+            echo "should_bump=true" >> "$GITHUB_OUTPUT"
+            echo "No no-bump pattern set, allowing bump"
+            exit 0
+          fi
+
+          if echo "$BRANCH" | grep -qE "$PATTERN"; then
+            echo "should_bump=false" >> "$GITHUB_OUTPUT"
+            echo "⏭️ Branch '$BRANCH' matches no-bump pattern, skipping version bump"
+          else
+            echo "should_bump=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Branch '$BRANCH' does not match no-bump pattern, allowing bump"
+          fi
 
       - name: Validate branch name
         id: validate-branch
@@ -198,7 +223,8 @@ jobs:
       needs.check-pr.outputs.target_valid == 'true' &&
       needs.check-pr.outputs.has_conventional == 'true' &&
       needs.check-pr.outputs.bump_type != '' &&
-      needs.check-pr.outputs.bump_type != 'doc'
+      needs.check-pr.outputs.bump_type != 'doc' &&
+      needs.check-pr.outputs.should_bump == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
