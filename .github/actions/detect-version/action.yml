@@ -1,0 +1,117 @@
+name: 'Detect Version'
+description: 'Auto-detects version from standard version files'
+inputs:
+  version-source:
+    description: 'Path to version file (auto-detect if not specified)'
+    required: false
+    default: 'auto'
+outputs:
+  version:
+    description: 'Detected version string'
+  version-file:
+    description: 'Path to the version file used'
+  technology:
+    description: 'Detected technology'
+runs:
+  using: composite
+  steps:
+    - name: Detect version
+      id: detect
+      shell: bash
+      run: |
+        VERSION=""
+        VERSION_FILE=""
+        TECH=""
+        
+        # If custom version source provided, use it
+        if [ "${{ inputs.version-source }}" != "auto" ] && [ -f "${{ inputs.version-source }}" ]; then
+          VERSION_FILE="${{ inputs.version-source }}"
+        fi
+        
+        # Auto-detect from standard files (priority order)
+        if [ -z "$VERSION_FILE" ]; then
+          # Check galaxy.yml (Ansible)
+          if [ -f "galaxy.yml" ]; then
+            VERSION=$(grep "^version:" galaxy.yml | sed 's/version: //' | tr -d ' "')
+            VERSION_FILE="galaxy.yml"
+            TECH="ansible"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check pom.xml (Java)
+          if [ -f "pom.xml" ]; then
+            VERSION=$(grep -m1 "<version>" pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' ')
+            VERSION_FILE="pom.xml"
+            TECH="java"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check Chart.yml (Helm)
+          if [ -f "Chart.yml" ] || [ -f "chart.yml" ]; then
+            CHART_FILE=$(ls -1 [Cc]hart.yml 2>/dev/null | head -1)
+            VERSION=$(grep "^version:" "$CHART_FILE" | sed 's/version: //' | tr -d ' "')
+            VERSION_FILE="$CHART_FILE"
+            TECH="helm"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check package.json (Node.js)
+          if [ -f "package.json" ]; then
+            VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+            VERSION_FILE="package.json"
+            TECH="nodejs"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check Cargo.toml (Rust)
+          if [ -f "Cargo.toml" ]; then
+            VERSION=$(grep "^version" Cargo.toml | head -1 | sed 's/version = //' | tr -d ' "')
+            VERSION_FILE="Cargo.toml"
+            TECH="rust"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check pyproject.toml (Python)
+          if [ -f "pyproject.toml" ]; then
+            VERSION=$(grep "version" pyproject.toml | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
+            VERSION_FILE="pyproject.toml"
+            TECH="python"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check setup.py (Python legacy)
+          if [ -f "setup.py" ]; then
+            VERSION=$(grep "version=" setup.py | head -1 | sed "s/.*version='\(.*\)'.*$/\1/" | sed 's/.*version="\(.*\)".*$/\1/')
+            VERSION_FILE="setup.py"
+            TECH="python"
+          fi
+        fi
+        
+        if [ -z "$VERSION_FILE" ]; then
+          # Check VERSION or version.txt (Generic)
+          if [ -f "VERSION" ]; then
+            VERSION=$(cat VERSION | tr -d ' \n')
+            VERSION_FILE="VERSION"
+            TECH="generic"
+          elif [ -f "version.txt" ]; then
+            VERSION=$(cat version.txt | tr -d ' \n')
+            VERSION_FILE="version.txt"
+            TECH="generic"
+          fi
+        fi
+        
+        if [ -n "$VERSION" ]; then
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version-file=$VERSION_FILE" >> "$GITHUB_OUTPUT"
+          echo "technology=$TECH" >> "$GITHUB_OUTPUT"
+          echo "✅ Version detected: $VERSION (from $VERSION_FILE)"
+        else
+          echo "❌ No version detected"
+          exit 1
+        fi

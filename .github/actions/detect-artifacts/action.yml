@@ -1,0 +1,65 @@
+name: 'Detect Artifacts'
+description: 'Auto-detects artifacts to build based on repository files'
+outputs:
+  artifacts:
+    description: 'Comma-separated list of artifacts to build (binary,docker,helm)'
+  binary-type:
+    description: 'Type of binary artifact (java,nodejs,go,python,rust,ansible,generic)'
+runs:
+  using: composite
+  steps:
+    - name: Detect artifacts
+      id: detect
+      shell: bash
+      run: |
+        ARTIFACTS=""
+        BINARY_TYPE=""
+        
+        # Check for Dockerfile
+        if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+          ARTIFACTS="docker"
+        fi
+        
+        # Check for Helm chart
+        if [ -f "Chart.yml" ] || [ -f "chart.yml" ] || [ -d "helm" ] || [ -d "charts" ]; then
+          if [ -n "$ARTIFACTS" ]; then
+            ARTIFACTS="$ARTIFACTS,helm"
+          else
+            ARTIFACTS="helm"
+          fi
+        fi
+        
+        # Check for binary artifacts
+        if [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+          BINARY_TYPE="java"
+        elif [ -f "package.json" ]; then
+          BINARY_TYPE="nodejs"
+        elif [ -f "go.mod" ]; then
+          BINARY_TYPE="go"
+        elif [ -f "Cargo.toml" ]; then
+          BINARY_TYPE="rust"
+        elif [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "setup.cfg" ]; then
+          BINARY_TYPE="python"
+        elif [ -f "galaxy.yml" ]; then
+          BINARY_TYPE="ansible"
+        elif [ -f "Makefile" ] || [ -f "VERSION" ] || [ -f "version.txt" ]; then
+          BINARY_TYPE="generic"
+        fi
+        
+        if [ -n "$BINARY_TYPE" ]; then
+          if [ -n "$ARTIFACTS" ]; then
+            ARTIFACTS="binary,$ARTIFACTS"
+          else
+            ARTIFACTS="binary"
+          fi
+        fi
+        
+        if [ -n "$ARTIFACTS" ]; then
+          echo "artifacts=$ARTIFACTS" >> "$GITHUB_OUTPUT"
+          echo "binary-type=$BINARY_TYPE" >> "$GITHUB_OUTPUT"
+          echo "✅ Artifacts detected: $ARTIFACTS (binary type: $BINARY_TYPE)"
+        else
+          echo "⚠️ No artifacts detected"
+          echo "artifacts=" >> "$GITHUB_OUTPUT"
+          echo "binary-type=" >> "$GITHUB_OUTPUT"
+        fi

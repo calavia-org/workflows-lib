@@ -1,0 +1,167 @@
+name: 'Build Binary'
+description: 'Builds binary artifact based on technology type'
+inputs:
+  technology:
+    description: 'Technology type (java,nodejs,go,python,rust,ansible,generic)'
+    required: true
+  version:
+    description: 'Version to build'
+    required: true
+  build-command:
+    description: 'Override build command'
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version for Python/Ansible'
+    required: false
+    default: '3.12'
+  node-version:
+    description: 'Node.js version for Node.js'
+    required: false
+    default: '20'
+  go-version:
+    description: 'Go version for Go'
+    required: false
+    default: '1.22'
+  rust-toolchain:
+    description: 'Rust toolchain for Rust'
+    required: false
+    default: 'stable'
+  java-version:
+    description: 'Java version for Java'
+    required: false
+    default: '21'
+  java-distribution:
+    description: 'Java distribution for Java'
+    required: false
+    default: 'temurin'
+  ansible-collection-path:
+    description: 'Path to Ansible collection'
+    required: false
+    default: ''
+outputs:
+  artifact-path:
+    description: 'Path to built binary artifact'
+  artifact-name:
+    description: 'Name of the artifact'
+runs:
+  using: composite
+  steps:
+    - name: Setup environment
+      uses: actions/setup-python@v5
+      if: inputs.technology == 'python' || inputs.technology == 'ansible'
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      if: inputs.technology == 'nodejs'
+      with:
+        node-version: ${{ inputs.node-version }}
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      if: inputs.technology == 'go'
+      with:
+        go-version: ${{ inputs.go-version }}
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      if: inputs.technology == 'rust'
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      if: inputs.technology == 'java'
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: ${{ inputs.java-distribution }}
+    - name: Build binary
+      id: build
+      shell: bash
+      run: |
+        TECH="${{ inputs.technology }}"
+        VERSION="${{ inputs.version }}"
+        ARTIFACT_PATH=""
+        ARTIFACT_NAME=""
+        
+        # Use custom command if provided
+        if [ -n "${{ inputs.build-command }}" ]; then
+          echo "Running custom build command..."
+          ${{ inputs.build-command }}
+          echo "artifact-path=${{ inputs.build-command }}" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=custom" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        
+        case "$TECH" in
+          java)
+            if [ -f "pom.xml" ]; then
+              mvn package -DskipTests
+              ARTIFACT_PATH=$(ls target/*.jar | head -1)
+              ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            elif [ -f "build.gradle" ]; then
+              gradle build -x test
+              ARTIFACT_PATH=$(ls build/libs/*.jar | head -1)
+              ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            fi
+            ;;
+          nodejs)
+            if [ -f "package.json" ]; then
+              if grep -q '"build"' package.json; then
+                npm run build
+              fi
+              npm pack
+              ARTIFACT_PATH=$(ls *.tgz | head -1)
+              ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            fi
+            ;;
+          go)
+            go build -o bin/ .
+            ARTIFACT_PATH=$(ls bin/* | head -1)
+            ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            ;;
+          rust)
+            cargo build --release
+            ARTIFACT_PATH=$(ls target/release/* | grep -v '.d' | head -1)
+            ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            ;;
+          python)
+            if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
+              poetry build
+            elif [ -f "setup.py" ]; then
+              python setup.py sdist bdist_wheel
+            elif [ -f "setup.cfg" ]; then
+              python -m build
+            fi
+            ARTIFACT_PATH=$(ls dist/* | head -1)
+            ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            ;;
+          ansible)
+            if [ -n "${{ inputs.ansible-collection-path }}" ]; then
+              cd "${{ inputs.ansible-collection-path }}"
+            fi
+            ansible-galaxy collection build --force
+            ARTIFACT_PATH=$(ls *.tar.gz | head -1)
+            ARTIFACT_NAME=$(basename "$ARTIFACT_PATH")
+            ;;
+          generic)
+            if [ -f "Makefile" ] && grep -q "^build:" Makefile; then
+              make build
+            fi
+            ARTIFACT_PATH="."
+            ARTIFACT_NAME="${{ github.repository }}-${{ inputs.version }}"
+            ;;
+        esac
+        
+        if [ -n "$ARTIFACT_PATH" ]; then
+          echo "artifact-path=$ARTIFACT_PATH" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "✅ Built binary: $ARTIFACT_NAME"
+        else
+          echo "❌ Build failed"
+          exit 1
+        fi
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: binary-${{ inputs.technology }}-${{ inputs.version }}
+        path: ${{ steps.build.outputs.artifact-path }}
+        retention-days: 7

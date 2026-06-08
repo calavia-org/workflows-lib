@@ -1,0 +1,36 @@
+name: 'Sign Helm'
+description: 'Signs Helm chart with GPG'
+inputs:
+  chart-path:
+    description: 'Path to Helm chart package'
+    required: true
+  gpg-key:
+    description: 'GPG private key'
+    required: true
+  gpg-passphrase:
+    description: 'GPG passphrase'
+    required: false
+    default: ''
+outputs:
+  provenance-path:
+    description: 'Path to provenance file'
+runs:
+  using: composite
+  steps:
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ inputs.gpg-key }}
+        passphrase: ${{ inputs.gpg-passphrase }}
+    - name: Sign chart
+      shell: bash
+      run: |
+        CHART="${{ inputs.chart-path }}"
+        if [ -f "$CHART" ]; then
+          gpg --armor --detach-sign "$CHART"
+          echo "✅ Signed: $CHART.asc"
+          echo "provenance-path=$CHART.asc" >> "$GITHUB_OUTPUT"
+        else
+          echo "❌ Chart not found: $CHART"
+          exit 1
+        fi

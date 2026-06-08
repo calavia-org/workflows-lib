@@ -1,0 +1,36 @@
+name: 'Sign Binary'
+description: 'Signs binary artifact with GPG'
+inputs:
+  artifact-path:
+    description: 'Path to artifact to sign'
+    required: true
+  gpg-key:
+    description: 'GPG private key'
+    required: true
+  gpg-passphrase:
+    description: 'GPG passphrase'
+    required: false
+    default: ''
+outputs:
+  signature-path:
+    description: 'Path to signature file'
+runs:
+  using: composite
+  steps:
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ inputs.gpg-key }}
+        passphrase: ${{ inputs.gpg-passphrase }}
+    - name: Sign artifact
+      shell: bash
+      run: |
+        ARTIFACT="${{ inputs.artifact-path }}"
+        if [ -f "$ARTIFACT" ]; then
+          gpg --armor --detach-sign "$ARTIFACT"
+          echo "✅ Signed: $ARTIFACT.asc"
+          echo "signature-path=$ARTIFACT.asc" >> "$GITHUB_OUTPUT"
+        else
+          echo "❌ Artifact not found: $ARTIFACT"
+          exit 1
+        fi

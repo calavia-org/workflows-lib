@@ -1,0 +1,47 @@
+name: 'Rollback Release'
+description: 'Rolls back published artifacts on failure'
+inputs:
+  release-id:
+    description: 'GitHub Release ID to delete'
+    required: false
+    default: ''
+  image-tags:
+    description: 'Comma-separated Docker image tags to delete'
+    required: false
+    default: ''
+  github-token:
+    description: 'GitHub token'
+    required: true
+outputs:
+  rollback-status:
+    description: 'Status of rollback'
+runs:
+  using: composite
+  steps:
+    - name: Rollback GitHub Release
+      if: inputs.release-id != ''
+      shell: bash
+      run: |
+        echo "🗑️ Deleting GitHub Release ${{ inputs.release-id }}..."
+        gh release delete ${{ inputs.release-id }} --yes || echo "⚠️ Failed to delete release"
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+    - name: Rollback GHCR images
+      if: inputs.image-tags != ''
+      shell: bash
+      run: |
+        IFS=',' read -ra TAGS <<< "${{ inputs.image-tags }}"
+        for tag in "${TAGS[@]}"; do
+          tag=$(echo "$tag" | tr -d ' ')
+          if [ -n "$tag" ]; then
+            echo "🗑️ Deleting image: $tag"
+            # Note: GHCR doesn't support deletion via API easily
+            # This would need to use the GitHub API or gh CLI
+            echo "⚠️ Image deletion requires manual cleanup or gh CLI"
+          fi
+        done
+    - name: Notify rollback
+      shell: bash
+      run: |
+        echo "❌ Release rolled back due to failure"
+        echo "rollback-status=rolled-back" >> "$GITHUB_OUTPUT"

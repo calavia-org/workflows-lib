@@ -1,0 +1,52 @@
+name: 'Publish to GHCR'
+description: 'Pushes Docker image to GitHub Container Registry'
+inputs:
+  image-tag:
+    description: 'Full image tag to push'
+    required: true
+  additional-tags:
+    description: 'Additional tags to push'
+    required: false
+    default: 'latest'
+  github-token:
+    description: 'GitHub token for GHCR'
+    required: true
+outputs:
+  pushed-tags:
+    description: 'Comma-separated list of pushed tags'
+runs:
+  using: composite
+  steps:
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+    - name: Push image
+      id: push
+      shell: bash
+      run: |
+        IMAGE="${{ inputs.image-tag }}"
+        PUSHED=""
+        
+        # Push main tag
+        docker push "$IMAGE"
+        PUSHED="$IMAGE"
+        echo "Pushed: $IMAGE"
+        
+        # Push additional tags
+        IFS=',' read -ra TAGS <<< "${{ inputs.additional-tags }}"
+        for tag in "${TAGS[@]}"; do
+          tag=$(echo "$tag" | tr -d ' ')
+          if [ -n "$tag" ]; then
+            BASE=$(echo "$IMAGE" | sed 's/:.*//')
+            ADDITIONAL="$BASE:$tag"
+            docker push "$ADDITIONAL"
+            PUSHED="$PUSHED,$ADDITIONAL"
+            echo "Pushed: $ADDITIONAL"
+          fi
+        done
+        
+        echo "pushed-tags=$PUSHED" >> "$GITHUB_OUTPUT"
+        echo "✅ All tags pushed to GHCR"

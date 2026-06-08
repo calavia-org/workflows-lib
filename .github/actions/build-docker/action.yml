@@ -1,0 +1,73 @@
+name: 'Build Docker'
+description: 'Builds Docker image using binary artifact'
+inputs:
+  version:
+    description: 'Version to tag the image'
+    required: true
+  image-name:
+    description: 'Image name (default: repo name)'
+    required: false
+    default: ''
+  dockerfile-path:
+    description: 'Path to Dockerfile'
+    required: false
+    default: 'Dockerfile'
+  build-context:
+    description: 'Build context'
+    required: false
+    default: '.'
+  binary-artifact:
+    description: 'Path to binary artifact to include'
+    required: false
+    default: ''
+  additional-tags:
+    description: 'Additional tags (comma-separated)'
+    required: false
+    default: 'latest'
+outputs:
+  image-tag:
+    description: 'Full image tag with version'
+  image-name:
+    description: 'Image name'
+runs:
+  using: composite
+  steps:
+    - name: Download binary artifact
+      if: inputs.binary-artifact != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.binary-artifact }}
+        path: ./artifact
+    - name: Build Docker image
+      id: build
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        IMAGE_NAME="${{ inputs.image-name }}"
+        
+        if [ -z "$IMAGE_NAME" ]; then
+          IMAGE_NAME="${{ github.repository }}"
+        fi
+        
+        # Convert to lowercase and replace / with -
+        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+        
+        FULL_TAG="ghcr.io/$IMAGE_NAME:$VERSION"
+        
+        # Build the image
+        docker build -f ${{ inputs.dockerfile-path }} -t "$FULL_TAG" ${{ inputs.build-context }}
+        
+        # Tag additional tags
+        IFS=',' read -ra TAGS <<< "${{ inputs.additional-tags }}"
+        for tag in "${TAGS[@]}"; do
+          tag=$(echo "$tag" | tr -d ' ')
+          if [ -n "$tag" ]; then
+            ADDITIONAL_TAG="ghcr.io/$IMAGE_NAME:$tag"
+            docker tag "$FULL_TAG" "$ADDITIONAL_TAG"
+            echo "Tagged: $ADDITIONAL_TAG"
+          fi
+        done
+        
+        echo "image-tag=$FULL_TAG" >> "$GITHUB_OUTPUT"
+        echo "image-name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+        echo "✅ Built Docker image: $FULL_TAG"

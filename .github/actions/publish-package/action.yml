@@ -1,0 +1,83 @@
+name: 'Publish Package'
+description: 'Publishes to package manager (npm, PyPI, Maven, Ansible Galaxy)'
+inputs:
+  package-manager:
+    description: 'Package manager (npm,pypi,maven,ansible-galaxy)'
+    required: true
+  artifact-path:
+    description: 'Path to artifact to publish'
+    required: false
+    default: ''
+  registry-url:
+    description: 'Registry URL'
+    required: false
+    default: ''
+  token:
+    description: 'Token for registry'
+    required: false
+    default: ''
+  username:
+    description: 'Username for registry'
+    required: false
+    default: ''
+  password:
+    description: 'Password for registry'
+    required: false
+    default: ''
+  gpg-key:
+    description: 'GPG key for signing (Maven)'
+    required: false
+    default: ''
+outputs:
+  publish-url:
+    description: 'URL to published package'
+runs:
+  using: composite
+  steps:
+    - name: Publish to package manager
+      id: publish
+      shell: bash
+      run: |
+        MANAGER="${{ inputs.package-manager }}"
+        ARTIFACT="${{ inputs.artifact-path }}"
+        
+        case "$MANAGER" in
+          npm)
+            if [ -f "package.json" ]; then
+              echo "📦 Publishing to npm..."
+              npm publish
+              echo "publish-url=https://www.npmjs.com/package/$(jq -r .name package.json)" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          pypi)
+            if [ -n "$ARTIFACT" ] && [ -f "$ARTIFACT" ]; then
+              echo "📦 Publishing to PyPI..."
+              pip install twine
+              twine upload "$ARTIFACT"
+              echo "publish-url=https://pypi.org/project/$(basename $ARTIFACT)" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          maven)
+            if [ -f "pom.xml" ]; then
+              echo "📦 Publishing to Maven Central..."
+              if [ -n "${{ inputs.gpg-key }}" ]; then
+                mvn deploy -Psign -Dgpg.passphrase="${{ inputs.gpg-key }}"
+              else
+                mvn deploy
+              fi
+              echo "publish-url=https://repo1.maven.org/maven2/" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          ansible-galaxy)
+            if [ -n "$ARTIFACT" ] && [ -f "$ARTIFACT" ]; then
+              echo "📦 Publishing to Ansible Galaxy..."
+              ansible-galaxy collection publish "$ARTIFACT" --api-key="${{ inputs.token }}"
+              echo "publish-url=https://galaxy.ansible.com/" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          *)
+            echo "⚠️ Unknown package manager: $MANAGER"
+            ;;
+        esac
+        
+        echo "✅ Package published"

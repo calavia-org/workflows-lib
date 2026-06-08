@@ -1,0 +1,99 @@
+name: 'Generate Release Notes'
+description: 'Generates release notes from conventional commits'
+inputs:
+  version:
+    description: 'Release version'
+    required: true
+  since:
+    description: 'Tag to generate notes since'
+    required: false
+    default: ''
+  template:
+    description: 'Path to custom template'
+    required: false
+    default: ''
+outputs:
+  notes:
+    description: 'Generated release notes'
+runs:
+  using: composite
+  steps:
+    - name: Generate notes
+      id: notes
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        SINCE="${{ inputs.since }}"
+        
+        # Get commits since last tag
+        if [ -n "$SINCE" ]; then
+          COMMITS=$(git log "$SINCE"..HEAD --pretty=format:"%s (%h)" --no-merges)
+        else
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:"%s (%h)" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges)
+          fi
+        fi
+        
+        # Parse conventional commits
+        FEATURES=""
+        FIXES=""
+        DOCS=""
+        CHORE=""
+        BUILD=""
+        SECURITY=""
+        BREAKING=""
+        
+        while IFS= read -r commit; do
+          if echo "$commit" | grep -q "^feat:"; then
+            FEATURES="$FEATURES\n- $commit"
+          elif echo "$commit" | grep -q "^fix:"; then
+            FIXES="$FIXES\n- $commit"
+          elif echo "$commit" | grep -q "^docs:"; then
+            DOCS="$DOCS\n- $commit"
+          elif echo "$commit" | grep -q "^chore:\|^refactor:\|^test:"; then
+            CHORE="$CHORE\n- $commit"
+          elif echo "$commit" | grep -q "^build:\|^ci:"; then
+            BUILD="$BUILD\n- $commit"
+          elif echo "$commit" | grep -q "^security:"; then
+            SECURITY="$SECURITY\n- $commit"
+          fi
+          
+          if echo "$commit" | grep -q "BREAKING CHANGE"; then
+            BREAKING="$BREAKING\n- $commit"
+          fi
+        done <<< "$COMMITS"
+        
+        # Build markdown
+        NOTES="# Release v$VERSION\n\n"
+        NOTES="$NOTES## What's Changed\n\n"
+        
+        if [ -n "$FEATURES" ]; then
+          NOTES="$NOTES### 🚀 Features\n$FEATURES\n\n"
+        fi
+        if [ -n "$FIXES" ]; then
+          NOTES="$NOTES### 🐛 Bug Fixes\n$FIXES\n\n"
+        fi
+        if [ -n "$DOCS" ]; then
+          NOTES="$NOTES### 📝 Documentation\n$DOCS\n\n"
+        fi
+        if [ -n "$CHORE" ]; then
+          NOTES="$NOTES### 🔧 Maintenance\n$CHORE\n\n"
+        fi
+        if [ -n "$BUILD" ]; then
+          NOTES="$NOTES### 🏗️ Build\n$BUILD\n\n"
+        fi
+        if [ -n "$SECURITY" ]; then
+          NOTES="$NOTES### 🛡️ Security\n$SECURITY\n\n"
+        fi
+        if [ -n "$BREAKING" ]; then
+          NOTES="$NOTS### 💥 Breaking Changes\n$BREAKING\n\n"
+        fi
+        
+        echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+        
+        # Write to file for debugging
+        echo "$NOTES" > RELEASE_NOTES.md
+        echo "✅ Release notes generated"

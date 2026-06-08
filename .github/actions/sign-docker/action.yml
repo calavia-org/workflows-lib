@@ -1,0 +1,28 @@
+name: 'Sign Docker'
+description: 'Signs Docker image with Cosign'
+inputs:
+  image-tag:
+    description: 'Full image tag to sign'
+    required: true
+  cosign-key:
+    description: 'Cosign private key'
+    required: true
+  cosign-password:
+    description: 'Cosign password'
+    required: false
+    default: ''
+outputs:
+  signature-path:
+    description: 'Path to signature file'
+runs:
+  using: composite
+  steps:
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3
+    - name: Sign image
+      shell: bash
+      run: |
+        IMAGE="${{ inputs.image-tag }}"
+        echo "🔏 Signing image: $IMAGE"
+        cosign sign --key <(echo "${{ inputs.cosign-key }}") "$IMAGE"
+        echo "✅ Signed: $IMAGE"

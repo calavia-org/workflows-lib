@@ -1,0 +1,54 @@
+name: 'Publish GitHub Release'
+description: 'Creates GitHub Release with artifacts and release notes'
+inputs:
+  version:
+    description: 'Release version'
+    required: true
+  release-name:
+    description: 'Release name'
+    required: false
+    default: ''
+  release-notes:
+    description: 'Release notes body'
+    required: false
+    default: ''
+  draft:
+    description: 'Create as draft'
+    required: false
+    default: 'false'
+  artifacts:
+    description: 'Comma-separated paths to artifacts'
+    required: false
+    default: ''
+  generate-notes:
+    description: 'Auto-generate release notes'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token'
+    required: true
+outputs:
+  release-url:
+    description: 'URL to the created release'
+  release-id:
+    description: 'ID of the created release'
+runs:
+  using: composite
+  steps:
+    - name: Create release
+      id: release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ inputs.version }}
+        name: ${{ inputs.release-name || format('Release v{0}', inputs.version) }}
+        body: ${{ inputs.release-notes }}
+        draft: ${{ inputs.draft }}
+        generate_release_notes: ${{ inputs.generate-notes }}
+        files: ${{ inputs.artifacts }}
+        token: ${{ inputs.github-token }}
+    - name: Output release info
+      shell: bash
+      run: |
+        echo "release-url=${{ steps.release.outputs.url }}" >> "$GITHUB_OUTPUT"
+        echo "release-id=${{ steps.release.outputs.id }}" >> "$GITHUB_OUTPUT"
+        echo "✅ Released: ${{ steps.release.outputs.url }}"

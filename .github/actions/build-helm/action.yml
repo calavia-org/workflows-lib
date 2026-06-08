@@ -1,0 +1,75 @@
+name: 'Build Helm'
+description: 'Builds Helm chart referencing Docker image'
+inputs:
+  version:
+    description: 'Chart version'
+    required: true
+  app-version:
+    description: 'App version (Docker image tag)'
+    required: true
+  chart-path:
+    description: 'Path to Helm chart directory'
+    required: false
+    default: 'helm'
+  image-name:
+    description: 'Docker image name'
+    required: false
+    default: ''
+  image-tag:
+    description: 'Docker image tag'
+    required: false
+    default: ''
+outputs:
+  chart-path:
+    description: 'Path to packaged chart'
+  chart-name:
+    description: 'Name of the chart'
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: 'latest'
+    - name: Build Helm chart
+      id: build
+      shell: bash
+      run: |
+        CHART_DIR="${{ inputs.chart-path }}"
+        VERSION="${{ inputs.version }}"
+        APP_VERSION="${{ inputs.app-version }}"
+        IMAGE_NAME="${{ inputs.image-name }}"
+        IMAGE_TAG="${{ inputs.image-tag }}"
+        
+        if [ ! -d "$CHART_DIR" ]; then
+          echo "❌ Chart directory not found: $CHART_DIR"
+          exit 1
+        fi
+        
+        # Update chart version and appVersion
+        if [ -f "$CHART_DIR/Chart.yaml" ]; then
+          sed -i "s/^version: .*/version: $VERSION/" "$CHART_DIR/Chart.yaml"
+          sed -i "s/^appVersion: .*/appVersion: \"$APP_VERSION\"/" "$CHART_DIR/Chart.yaml"
+        fi
+        
+        # Update image repository and tag in values.yaml if provided
+        if [ -n "$IMAGE_NAME" ] && [ -f "$CHART_DIR/values.yaml" ]; then
+          sed -i "s|repository: .*|repository: ghcr.io/$IMAGE_NAME|" "$CHART_DIR/values.yaml"
+          sed -i "s|tag: .*|tag: \"$IMAGE_TAG\"|" "$CHART_DIR/values.yaml"
+        fi
+        
+        # Package the chart
+        helm package "$CHART_DIR" --version "$VERSION"
+        
+        CHART_FILE=$(ls *.tgz | head -1)
+        CHART_NAME=$(basename "$CHART_FILE" .tgz)
+        
+        echo "chart-path=$CHART_FILE" >> "$GITHUB_OUTPUT"
+        echo "chart-name=$CHART_NAME" >> "$GITHUB_OUTPUT"
+        echo "✅ Built Helm chart: $CHART_NAME-$VERSION.tgz"
+    - name: Upload chart
+      uses: actions/upload-artifact@v4
+      with:
+        name: helm-chart-${{ inputs.version }}
+        path: ${{ steps.build.outputs.chart-path }}
+        retention-days: 7

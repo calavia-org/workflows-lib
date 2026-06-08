@@ -1,0 +1,444 @@
+name: Release Artifacts
+
+on:
+  workflow_call:
+    inputs:
+      technology:
+        description: 'Technology stack (auto-detect if not specified)'
+        type: string
+        required: false
+        default: 'auto'
+      artifacts:
+        description: 'Artifacts to build (auto-detect if not specified)'
+        type: string
+        required: false
+        default: 'auto'
+      version-source:
+        description: 'Path to version file (auto-detect if not specified)'
+        type: string
+        required: false
+        default: 'auto'
+      release-name:
+        description: 'Override release name'
+        type: string
+        required: false
+        default: ''
+      release-draft:
+        description: 'Create as draft'
+        type: boolean
+        required: false
+        default: false
+      generate-notes:
+        description: 'Auto-generate release notes'
+        type: boolean
+        required: false
+        default: true
+      publish-github-release:
+        description: 'Create GitHub Release'
+        type: boolean
+        required: false
+        default: true
+      publish-ghcr:
+        description: 'Publish Docker image to GHCR'
+        type: boolean
+        required: false
+        default: false
+      publish-package-manager:
+        description: 'Publish to package manager'
+        type: boolean
+        required: false
+        default: false
+      publish-helm-chart:
+        description: 'Publish Helm chart'
+        type: boolean
+        required: false
+        default: false
+      ghcr-image-name:
+        description: 'GHCR image name'
+        type: string
+        required: false
+        default: ''
+      ghcr-tags:
+        description: 'Additional GHCR tags'
+        type: string
+        required: false
+        default: 'latest'
+      helm-chart-path:
+        description: 'Path to Helm chart'
+        type: string
+        required: false
+        default: 'helm'
+      helm-chart-repo:
+        description: 'Helm chart repo URL'
+        type: string
+        required: false
+        default: ''
+      package-manager:
+        description: 'Package manager'
+        type: string
+        required: false
+        default: 'auto'
+      binary-artifacts:
+        description: 'Paths to binary artifacts'
+        type: string
+        required: false
+        default: ''
+      release-notes-template:
+        description: 'Custom release notes template'
+        type: string
+        required: false
+        default: ''
+      changelog-since:
+        description: 'Generate changelog since tag'
+        type: string
+        required: false
+        default: ''
+      sign-artifacts:
+        description: 'Enable signing'
+        type: boolean
+        required: false
+        default: false
+      sign-binary:
+        description: 'Sign binary'
+        type: boolean
+        required: false
+        default: false
+      sign-docker:
+        description: 'Sign Docker'
+        type: boolean
+        required: false
+        default: false
+      sign-helm:
+        description: 'Sign Helm'
+        type: boolean
+        required: false
+        default: false
+      rollback-on-failure:
+        description: 'Rollback on failure'
+        type: boolean
+        required: false
+        default: true
+      runner-label:
+        description: 'Runner label'
+        type: string
+        required: false
+        default: 'ubuntu-latest'
+      timeout-minutes:
+        description: 'Timeout'
+        type: number
+        required: false
+        default: 60
+      artifact-retention-days:
+        description: 'Artifact retention'
+        type: number
+        required: false
+        default: 7
+      notify-on-release:
+        description: 'Send notification'
+        type: boolean
+        required: false
+        default: true
+      slack-webhook:
+        description: 'Slack webhook'
+        type: string
+        required: false
+        default: ''
+      python-version:
+        description: 'Python version'
+        type: string
+        required: false
+        default: '3.12'
+      node-version:
+        description: 'Node.js version'
+        type: string
+        required: false
+        default: '20'
+      go-version:
+        description: 'Go version'
+        type: string
+        required: false
+        default: '1.22'
+      rust-toolchain:
+        description: 'Rust toolchain'
+        type: string
+        required: false
+        default: 'stable'
+      java-version:
+        description: 'Java version'
+        type: string
+        required: false
+        default: '21'
+      java-distribution:
+        description: 'Java distribution'
+        type: string
+        required: false
+        default: 'temurin'
+      ansible-collection-path:
+        description: 'Ansible collection path'
+        type: string
+        required: false
+        default: ''
+
+    secrets:
+      github-token:
+        description: 'GitHub token'
+        required: false
+      gpg-key:
+        description: 'GPG key'
+        required: false
+      gpg-passphrase:
+        description: 'GPG passphrase'
+        required: false
+      cosign-key:
+        description: 'Cosign key'
+        required: false
+      cosign-password:
+        description: 'Cosign password'
+        required: false
+      package-token:
+        description: 'Package manager token'
+        required: false
+      package-username:
+        description: 'Package manager username'
+        required: false
+      package-password:
+        description: 'Package manager password'
+        required: false
+      slack-webhook:
+        description: 'Slack webhook'
+        required: false
+
+jobs:
+  detect:
+    name: Detect Version & Artifacts
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version-file: ${{ steps.version.outputs.version-file }}
+      technology: ${{ steps.version.outputs.technology }}
+      artifacts: ${{ steps.artifacts.outputs.artifacts }}
+      binary-type: ${{ steps.artifacts.outputs.binary-type }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/detect-version
+        id: version
+        with:
+          version-source: ${{ inputs.version-source }}
+      - uses: ./.github/actions/detect-artifacts
+        id: artifacts
+
+  build-binary:
+    name: Build Binary
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'binary') }}
+    outputs:
+      artifact-path: ${{ steps.build.outputs.artifact-path }}
+      artifact-name: ${{ steps.build.outputs.artifact-name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-binary
+        id: build
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.binary-type }}
+          version: ${{ needs.detect.outputs.version }}
+          python-version: ${{ inputs.python-version }}
+          node-version: ${{ inputs.node-version }}
+          go-version: ${{ inputs.go-version }}
+          rust-toolchain: ${{ inputs.rust-toolchain }}
+          java-version: ${{ inputs.java-version }}
+          java-distribution: ${{ inputs.java-distribution }}
+          ansible-collection-path: ${{ inputs.ansible-collection-path }}
+
+  build-docker:
+    name: Build Docker
+    needs: [detect, build-binary]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'docker') }}
+    outputs:
+      image-tag: ${{ steps.build.outputs.image-tag }}
+      image-name: ${{ steps.build.outputs.image-name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-docker
+        id: build
+        with:
+          version: ${{ needs.detect.outputs.version }}
+          image-name: ${{ inputs.ghcr-image-name }}
+          additional-tags: ${{ inputs.ghcr-tags }}
+
+  build-helm:
+    name: Build Helm
+    needs: [detect, build-docker]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') }}
+    outputs:
+      chart-path: ${{ steps.build.outputs.chart-path }}
+      chart-name: ${{ steps.build.outputs.chart-name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-helm
+        id: build
+        with:
+          version: ${{ needs.detect.outputs.version }}
+          app-version: ${{ needs.detect.outputs.version }}
+          chart-path: ${{ inputs.helm-chart-path }}
+          image-name: ${{ needs.build-docker.outputs.image-name }}
+          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+
+  sign-binary:
+    name: Sign Binary
+    needs: [detect, build-binary]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/sign-binary
+        with:
+          artifact-path: ${{ needs.build-binary.outputs.artifact-path }}
+          gpg-key: ${{ secrets.gpg-key }}
+          gpg-passphrase: ${{ secrets.gpg-passphrase }}
+
+  sign-docker:
+    name: Sign Docker
+    needs: [detect, build-docker]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.sign-artifacts && inputs.sign-docker && contains(needs.detect.outputs.artifacts, 'docker') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/sign-docker
+        with:
+          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+          cosign-key: ${{ secrets.cosign-key }}
+
+  sign-helm:
+    name: Sign Helm
+    needs: [detect, build-helm]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/sign-helm
+        with:
+          chart-path: ${{ needs.build-helm.outputs.chart-path }}
+          gpg-key: ${{ secrets.gpg-key }}
+          gpg-passphrase: ${{ secrets.gpg-passphrase }}
+
+  publish-github-release:
+    name: Publish GitHub Release
+    needs: [detect, build-binary, build-docker, build-helm, sign-binary, sign-docker, sign-helm]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.publish-github-release && always() && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    outputs:
+      release-url: ${{ steps.publish.outputs.release-url }}
+      release-id: ${{ steps.publish.outputs.release-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/generate-release-notes
+        id: notes
+        with:
+          version: ${{ needs.detect.outputs.version }}
+          since: ${{ inputs.changelog-since }}
+      - uses: ./.github/actions/publish-github-release
+        id: publish
+        with:
+          version: ${{ needs.detect.outputs.version }}
+          release-name: ${{ inputs.release-name }}
+          release-notes: ${{ steps.notes.outputs.notes }}
+          draft: ${{ inputs.release-draft }}
+          generate-notes: ${{ inputs.generate-notes }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  publish-ghcr:
+    name: Publish to GHCR
+    needs: [detect, build-docker, sign-docker]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.publish-ghcr && always() && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') }}
+    steps:
+      - uses: ./.github/actions/publish-ghcr
+        with:
+          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+          additional-tags: ${{ inputs.ghcr-tags }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  publish-package:
+    name: Publish Package
+    needs: [detect, build-binary, sign-binary]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.publish-package-manager && always() && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/publish-package
+        with:
+          package-manager: ${{ inputs.package-manager }}
+          artifact-path: ${{ needs.build-binary.outputs.artifact-path }}
+          token: ${{ secrets.package-token }}
+          username: ${{ secrets.package-username }}
+          password: ${{ secrets.package-password }}
+
+  publish-helm:
+    name: Publish Helm
+    needs: [detect, build-helm, sign-helm]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.publish-helm-chart && always() && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/publish-helm
+        with:
+          chart-path: ${{ needs.build-helm.outputs.chart-path }}
+          chart-repo: ${{ inputs.helm-chart-repo }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  rollback:
+    name: Rollback
+    needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.rollback-on-failure && failure() }}
+    steps:
+      - uses: ./.github/actions/rollback-release
+        with:
+          release-id: ${{ needs.publish-github-release.outputs.release-id }}
+          image-tags: ${{ needs.build-docker.outputs.image-tag }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify
+    needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    if: ${{ inputs.notify-on-release && always() }}
+    steps:
+      - name: Slack notification
+        if: inputs.slack-webhook != ''
+        shell: bash
+        run: |
+          STATUS="${{ job.status }}"
+          REPO="${{ github.repository }}"
+          VERSION="${{ needs.detect.outputs.version }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          if [ "$STATUS" == "success" ]; then
+            COLOR="#36a64f"
+            TEXT="✅ Released ${REPO} v${VERSION}"
+          else
+            COLOR="#ff0000"
+            TEXT="❌ Release failed for ${REPO} v${VERSION}"
+          fi
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"attachments\":[{\"color\":\"${COLOR}\",\"text\":\"${TEXT}\",\"fields\":[{\"title\":\"Repository\",\"value\":\"${REPO}\",\"short\":true},{\"title\":\"Version\",\"value\":\"v${VERSION}\",\"short\":true},{\"title\":\"Run URL\",\"value\":\"${RUN_URL}\",\"short\":false}]}]}" \
+            ${{ inputs.slack-webhook }} || true
