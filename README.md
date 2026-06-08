@@ -51,6 +51,24 @@ jobs:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### Version Tags
+
+- `v0` - Tracks latest v0.x.x release (development, moves with each release)
+- `v0.0.1`, `v0.0.2`, etc. - Fixed versions for reproducibility
+- When major version 1 released, pin to explicit version (e.g., `v1.0.0`)
+
+### Development vs Production
+
+**Development** (consumer repositories):
+```yaml
+uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
+```
+
+**Production** (stable releases):
+```yaml
+uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0.0.2
+```
+
 ## Contributing
 
 When adding new workflows:
