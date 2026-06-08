@@ -4,6 +4,35 @@
 
 The `release-artifacts.yml` workflow handles building and releasing artifacts for multiple technologies.
 
+## Action References
+
+Composite actions used by this workflow are referenced remotely from external repositories, not from local paths within workflows-lib.
+
+### Remote Reference Format
+
+All composite actions use the format:
+
+```
+calavia-org/workflows-lib/.github/actions/NAME@v0
+```
+
+**Required path prefix**: The `.github/actions/` segment is mandatory in the path. Short formats like `calavia-org/workflows-lib/actions/NAME@v0` will fail.
+
+**Version tag**: `@v0` is a floating major tag that always points to the latest stable release. It is auto-updated by the `release.yml` workflow whenever a new version is tagged.
+
+### Self-Releasing Pattern
+
+The workflows-lib repository uses a self-releasing pattern:
+
+1. `release.yml` watches for version bumps in source files (e.g., `galaxy.yml`, `package.json`)
+2. On push to `main` after a version change, `release.yml`:
+   - Creates a GitHub Release with the new version
+   - Tags the repository (e.g., `v1.2.3`)
+   - Updates the `v0` tag to point to the new release
+3. Consumers referencing `@v0` automatically get the latest stable version without manual updates
+
+This pattern ensures that consumers of `calavia-org/workflows-lib` always receive up-to-date actions when they reference `@v0`, while version-pinned references (e.g., `@v1.2.3`) remain stable for pinned consumers.
+
 ## Technology Support
 
 ### Ansible

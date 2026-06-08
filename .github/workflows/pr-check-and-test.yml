@@ -235,7 +235,7 @@ jobs:
       primary: ${{ steps.detect.outputs.primary }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/detect-technology
+      - uses: calavia-org/workflows-lib/.github/actions/detect-technology@v0
         id: detect
         with:
           fail-on-missing: ${{ inputs.fail-on-missing }}
@@ -248,7 +248,7 @@ jobs:
     if: ${{ inputs.run-pre-commit }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pre-commit
+      - uses: calavia-org/workflows-lib/.github/actions/setup-pre-commit@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           custom-config: ${{ inputs.custom-pre-commit-config }}
@@ -334,7 +334,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
-        uses: ./.github/actions/run-tests
+        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           run-unit-tests: false
@@ -407,7 +407,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        uses: ./.github/actions/run-tests
+        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           run-unit-tests: ${{ inputs.run-unit-tests }}
@@ -558,7 +558,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Publish reports
-        uses: ./.github/actions/publish-reports
+        uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           report-enabled: ${{ inputs.report-enabled }}
