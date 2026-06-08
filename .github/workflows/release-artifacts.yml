@@ -178,6 +178,16 @@ on:
         type: string
         required: false
         default: ''
+      is-ansible-ee:
+        description: 'Build Ansible Execution Environment instead of standard Docker'
+        type: boolean
+        required: false
+        default: false
+      ee-definition-file:
+        description: 'Path to execution-environment.yml for Ansible EE build'
+        type: string
+        required: false
+        default: 'execution-environment.yml'
 
     secrets:
       github-token:
@@ -271,6 +281,8 @@ jobs:
           version: ${{ needs.detect.outputs.version }}
           image-name: ${{ inputs.ghcr-image-name }}
           additional-tags: ${{ inputs.ghcr-tags }}
+          is-ansible-ee: ${{ inputs.is-ansible-ee }}
+          ee-definition-file: ${{ inputs.ee-definition-file }}
 
   build-helm:
     name: Build Helm
