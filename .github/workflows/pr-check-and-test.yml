@@ -1,0 +1,576 @@
+name: PR Check and Test
+
+on:
+  workflow_call:
+    inputs:
+      technology:
+        description: 'Technology stack (auto-detect if not specified)'
+        type: string
+        required: false
+        default: 'auto'
+      run-pre-commit:
+        description: 'Run pre-commit hooks'
+        type: boolean
+        required: false
+        default: true
+      run-lint:
+        description: 'Run static analysis'
+        type: boolean
+        required: false
+        default: true
+      run-build:
+        description: 'Run build step'
+        type: boolean
+        required: false
+        default: true
+      run-tests:
+        description: 'Run all tests'
+        type: boolean
+        required: false
+        default: true
+      run-unit-tests:
+        description: 'Run unit tests'
+        type: boolean
+        required: false
+        default: true
+      run-integration-tests:
+        description: 'Run integration tests'
+        type: boolean
+        required: false
+        default: true
+      run-e2e-tests:
+        description: 'Run end-to-end tests'
+        type: boolean
+        required: false
+        default: false
+      run-package:
+        description: 'Run packaging step'
+        type: boolean
+        required: false
+        default: false
+      run-publish:
+        description: 'Run publish step'
+        type: boolean
+        required: false
+        default: false
+      fail-on-missing:
+        description: 'Fail if config file missing'
+        type: boolean
+        required: false
+        default: false
+      custom-pre-commit-config:
+        description: 'Path to custom pre-commit config'
+        type: string
+        required: false
+        default: ''
+      test-command:
+        description: 'Override test command'
+        type: string
+        required: false
+        default: ''
+      lint-command:
+        description: 'Override lint command'
+        type: string
+        required: false
+        default: ''
+      build-command:
+        description: 'Override build command'
+        type: string
+        required: false
+        default: ''
+      package-command:
+        description: 'Override package command'
+        type: string
+        required: false
+        default: ''
+      publish-command:
+        description: 'Override publish command'
+        type: string
+        required: false
+        default: ''
+      runner-label:
+        description: 'Runner label'
+        type: string
+        required: false
+        default: 'ubuntu-latest'
+      timeout-minutes:
+        description: 'Global timeout'
+        type: number
+        required: false
+        default: 30
+      artifact-retention-days:
+        description: 'Artifact retention days'
+        type: number
+        required: false
+        default: 7
+      cache-enabled:
+        description: 'Enable caching'
+        type: boolean
+        required: false
+        default: true
+      report-enabled:
+        description: 'Publish test reports'
+        type: boolean
+        required: false
+        default: true
+      python-version:
+        description: 'Python version'
+        type: string
+        required: false
+        default: '3.12'
+      node-version:
+        description: 'Node.js version'
+        type: string
+        required: false
+        default: '20'
+      go-version:
+        description: 'Go version'
+        type: string
+        required: false
+        default: '1.22'
+      rust-toolchain:
+        description: 'Rust toolchain'
+        type: string
+        required: false
+        default: 'stable'
+      java-version:
+        description: 'Java version'
+        type: string
+        required: false
+        default: '21'
+      java-distribution:
+        description: 'Java distribution'
+        type: string
+        required: false
+        default: 'temurin'
+      codecov-token:
+        description: 'Codecov token'
+        type: string
+        required: false
+        default: ''
+      slack-webhook:
+        description: 'Slack webhook URL'
+        type: string
+        required: false
+        default: ''
+      notify-on-failure:
+        description: 'Notify only on failure'
+        type: boolean
+        required: false
+        default: true
+      test-timeout:
+        description: 'Test timeout in minutes'
+        type: number
+        required: false
+        default: 30
+      max-parallel:
+        description: 'Max parallel test jobs'
+        type: number
+        required: false
+        default: 4
+      fail-fast:
+        description: 'Fail fast on first test failure'
+        type: boolean
+        required: false
+        default: false
+      tox-ini:
+        description: 'Path to tox.ini'
+        type: string
+        required: false
+        default: 'tox.ini'
+      ansible-collection-path:
+        description: 'Path to Ansible collection'
+        type: string
+        required: false
+        default: ''
+      test-paths:
+        description: 'Comma-separated test paths'
+        type: string
+        required: false
+        default: ''
+      extra-args:
+        description: 'Extra arguments'
+        type: string
+        required: false
+        default: ''
+      coverage-format:
+        description: 'Coverage format'
+        type: string
+        required: false
+        default: 'xml'
+      coverage-tool:
+        description: 'Coverage tool'
+        type: string
+        required: false
+        default: 'codecov'
+      comment-on-pr:
+        description: 'Comment on PR'
+        type: boolean
+        required: false
+        default: true
+      summary-title:
+        description: 'Summary title'
+        type: string
+        required: false
+        default: 'CI Results'
+
+    secrets:
+      github-token:
+        description: 'GitHub token'
+        required: false
+      codecov-token:
+        description: 'Codecov token'
+        required: false
+      slack-webhook:
+        description: 'Slack webhook'
+        required: false
+
+jobs:
+  detect:
+    name: Detect Technology
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    outputs:
+      technologies: ${{ steps.detect.outputs.technologies }}
+      primary: ${{ steps.detect.outputs.primary }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/detect-technology
+        id: detect
+        with:
+          fail-on-missing: ${{ inputs.fail-on-missing }}
+
+  pre-commit:
+    name: Pre-Commit
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-pre-commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-pre-commit
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          custom-config: ${{ inputs.custom-pre-commit-config }}
+          fail-on-missing: ${{ inputs.fail-on-missing }}
+          run-all-files: 'true'
+
+  lint:
+    name: Lint
+    needs: [detect, pre-commit]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-lint && always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run lint
+        shell: bash
+        run: |
+          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
+          
+          # Use custom command if provided
+          if [ -n "${{ inputs.lint-command }}" ]; then
+            echo "Running custom lint command..."
+            ${{ inputs.lint-command }}
+            exit 0
+          fi
+          
+          # Technology-specific lint
+          case "$TECH" in
+            python|ansible)
+              if command -v ruff &> /dev/null; then
+                ruff check .
+              elif command -v flake8 &> /dev/null; then
+                flake8
+              elif command -v pylint &> /dev/null; then
+                pylint **/*.py
+              fi
+              ;;
+            nodejs)
+              if [ -f "package.json" ]; then
+                if grep -q '"lint"' package.json; then
+                  npm run lint
+                elif command -v eslint &> /dev/null; then
+                  eslint . --ext .js,.jsx,.ts,.tsx
+                fi
+              fi
+              ;;
+            go)
+              if command -v golangci-lint &> /dev/null; then
+                golangci-lint run
+              else
+                go vet ./...
+              fi
+              ;;
+            rust)
+              cargo fmt --check
+              cargo clippy -- -D warnings
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                mvn checkstyle:check
+              elif [ -f "build.gradle" ]; then
+                gradle check
+              fi
+              ;;
+            docker)
+              if command -v hadolint &> /dev/null; then
+                hadolint Dockerfile
+              fi
+              ;;
+            generic)
+              if [ -f "Makefile" ] && grep -q "^lint:" Makefile; then
+                make lint
+              fi
+              ;;
+          esac
+
+  build:
+    name: Build
+    needs: [detect, lint]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-build && always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup environment
+        uses: ./.github/actions/run-tests
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          run-unit-tests: false
+          run-integration-tests: false
+          run-e2e-tests: false
+      - name: Run build
+        shell: bash
+        run: |
+          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
+          
+          # Use custom command if provided
+          if [ -n "${{ inputs.build-command }}" ]; then
+            echo "Running custom build command..."
+            ${{ inputs.build-command }}
+            exit 0
+          fi
+          
+          # Technology-specific build
+          case "$TECH" in
+            python|ansible)
+              if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
+                poetry build
+              elif [ -f "setup.py" ]; then
+                python setup.py build
+              elif [ -f "setup.cfg" ]; then
+                python -m build
+              fi
+              ;;
+            nodejs)
+              if [ -f "package.json" ]; then
+                if grep -q '"build"' package.json; then
+                  npm run build
+                fi
+              fi
+              ;;
+            go)
+              go build ./...
+              ;;
+            rust)
+              cargo build --release
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                mvn compile
+              elif [ -f "build.gradle" ]; then
+                gradle build -x test
+              fi
+              ;;
+            docker)
+              if [ -f "Dockerfile" ]; then
+                docker build -t ${{ github.repository }}:${{ github.sha }} .
+              fi
+              ;;
+            generic)
+              if [ -f "Makefile" ] && grep -q "^build:" Makefile; then
+                make build
+              fi
+              ;;
+          esac
+
+  test:
+    name: Test
+    needs: [detect, build]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-tests && always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    strategy:
+      fail-fast: ${{ inputs.fail-fast }}
+      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        uses: ./.github/actions/run-tests
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          run-unit-tests: ${{ inputs.run-unit-tests }}
+          run-integration-tests: ${{ inputs.run-integration-tests }}
+          run-e2e-tests: ${{ inputs.run-e2e-tests }}
+          test-command: ${{ inputs.test-command }}
+          python-version: ${{ inputs.python-version }}
+          node-version: ${{ inputs.node-version }}
+          go-version: ${{ inputs.go-version }}
+          rust-toolchain: ${{ inputs.rust-toolchain }}
+          java-version: ${{ inputs.java-version }}
+          java-distribution: ${{ inputs.java-distribution }}
+          cache-enabled: ${{ inputs.cache-enabled }}
+          test-timeout: ${{ inputs.test-timeout }}
+          tox-ini: ${{ inputs.tox-ini }}
+          ansible-collection-path: ${{ inputs.ansible-collection-path }}
+          test-paths: ${{ inputs.test-paths }}
+          extra-args: ${{ inputs.extra-args }}
+          coverage-format: ${{ inputs.coverage-format }}
+          fail-fast: ${{ inputs.fail-fast }}
+
+  package:
+    name: Package
+    needs: [detect, test]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-package && always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run package
+        shell: bash
+        run: |
+          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
+          
+          # Use custom command if provided
+          if [ -n "${{ inputs.package-command }}" ]; then
+            echo "Running custom package command..."
+            ${{ inputs.package-command }}
+            exit 0
+          fi
+          
+          # Technology-specific package
+          case "$TECH" in
+            python|ansible)
+              if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
+                poetry build
+              elif [ -f "setup.py" ]; then
+                python setup.py sdist bdist_wheel
+              elif [ -f "setup.cfg" ]; then
+                python -m build
+              fi
+              ;;
+            nodejs)
+              if [ -f "package.json" ]; then
+                npm pack
+              fi
+              ;;
+            go)
+              go build -o bin/ .
+              ;;
+            rust)
+              cargo package
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                mvn package -DskipTests
+              elif [ -f "build.gradle" ]; then
+                gradle jar
+              fi
+              ;;
+            docker)
+              if [ -f "Dockerfile" ]; then
+                docker save ${{ github.repository }}:${{ github.sha }} > ${{ github.repository }}-${{ github.sha }}.tar
+              fi
+              ;;
+            generic)
+              if [ -f "Makefile" ] && grep -q "^package:" Makefile; then
+                make package
+              fi
+              ;;
+          esac
+
+  publish:
+    name: Publish
+    needs: [detect, package]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-publish && always() && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run publish
+        shell: bash
+        run: |
+          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
+          
+          # Use custom command if provided
+          if [ -n "${{ inputs.publish-command }}" ]; then
+            echo "Running custom publish command..."
+            ${{ inputs.publish-command }}
+            exit 0
+          fi
+          
+          # Technology-specific publish
+          case "$TECH" in
+            python|ansible)
+              if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
+                poetry publish
+              elif [ -f "setup.py" ]; then
+                twine upload dist/*
+              fi
+              ;;
+            nodejs)
+              if [ -f "package.json" ]; then
+                npm publish
+              fi
+              ;;
+            go)
+              echo "Go modules published via git tags"
+              ;;
+            rust)
+              cargo publish
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                mvn deploy
+              elif [ -f "build.gradle" ]; then
+                gradle publish
+              fi
+              ;;
+            docker)
+              if [ -f "Dockerfile" ]; then
+                docker push ${{ github.repository }}:${{ github.sha }}
+              fi
+              ;;
+            generic)
+              if [ -f "Makefile" ] && grep -q "^publish:" Makefile; then
+                make publish
+              fi
+              ;;
+          esac
+
+  report:
+    name: Publish Reports
+    needs: [detect, test]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.report-enabled && always() }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish reports
+        uses: ./.github/actions/publish-reports
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          report-enabled: ${{ inputs.report-enabled }}
+          coverage-format: ${{ inputs.coverage-format }}
+          coverage-tool: ${{ inputs.coverage-tool }}
+          codecov-token: ${{ inputs.codecov-token }}
+          artifact-retention-days: ${{ inputs.artifact-retention-days }}
+          publish-test-results: ${{ inputs.report-enabled }}
+          publish-coverage: ${{ inputs.report-enabled }}
+          publish-sarif: false
+          comment-on-pr: ${{ inputs.comment-on-pr }}
+          github-token: ${{ inputs.github-token || secrets.github-token }}
+          slack-webhook: ${{ inputs.slack-webhook }}
+          notify-on-failure: ${{ inputs.notify-on-failure }}
+          summary-title: ${{ inputs.summary-title }}

@@ -1,0 +1,100 @@
+name: 'Detect Technology'
+description: 'Detects the technology stack of the repository based on file indicators'
+outputs:
+  technologies:
+    description: 'Comma-separated list of detected technologies'
+  primary:
+    description: 'Primary technology for the repository'
+runs:
+  using: composite
+  steps:
+    - name: Detect technology
+      id: detect
+      shell: bash
+      run: |
+        TECHS=""
+        PRIMARY=""
+        
+        # Check for Ansible
+        if [ -f "galaxy.yml" ] || [ -f "ansible.cfg" ]; then
+          TECHS="ansible,${TECHS}"
+          PRIMARY="ansible"
+        fi
+        
+        # Check for Python
+        if [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "setup.cfg" ] || [ -f "requirements.txt" ] || [ -f "Pipfile" ]; then
+          TECHS="python,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="python"
+          fi
+        fi
+        
+        # Check for Node.js
+        if [ -f "package.json" ]; then
+          TECHS="nodejs,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="nodejs"
+          fi
+        fi
+        
+        # Check for Go
+        if [ -f "go.mod" ]; then
+          TECHS="go,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="go"
+          fi
+        fi
+        
+        # Check for Rust
+        if [ -f "Cargo.toml" ]; then
+          TECHS="rust,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="rust"
+          fi
+        fi
+        
+        # Check for Java
+        if [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+          TECHS="java,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="java"
+          fi
+        fi
+        
+        # Check for Docker
+        if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+          TECHS="docker,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="docker"
+          fi
+        fi
+        
+        # Check for generic
+        if [ -f "Makefile" ] || [ -f "VERSION" ] || [ -f "version.txt" ]; then
+          TECHS="generic,${TECHS}"
+          if [ -z "$PRIMARY" ]; then
+            PRIMARY="generic"
+          fi
+        fi
+        
+        # Remove trailing comma
+        TECHS=$(echo "$TECHS" | sed 's/,$//')
+        
+        if [ -z "$TECHS" ]; then
+          echo "No recognized technology detected"
+          if [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+            exit 1
+          fi
+          PRIMARY="generic"
+          TECHS="generic"
+        fi
+        
+        echo "technologies=$TECHS" >> "$GITHUB_OUTPUT"
+        echo "primary=$PRIMARY" >> "$GITHUB_OUTPUT"
+        echo "Detected technologies: $TECHS"
+        echo "Primary technology: $PRIMARY"
+    - name: Output results
+      shell: bash
+      run: |
+        echo "Detected technologies: ${{ steps.detect.outputs.technologies }}"
+        echo "Primary technology: ${{ steps.detect.outputs.primary }}"

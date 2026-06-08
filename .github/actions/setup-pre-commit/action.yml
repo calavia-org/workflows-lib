@@ -1,0 +1,208 @@
+name: 'Setup and Run Pre-Commit'
+description: 'Installs and runs pre-commit hooks with technology-specific support'
+inputs:
+  technology:
+    description: 'Technology stack (python, nodejs, go, rust, java, docker, generic)'
+    required: false
+    default: 'auto'
+  custom-config:
+    description: 'Path to custom pre-commit config file'
+    required: false
+    default: ''
+  fail-on-missing:
+    description: 'Fail if no pre-commit config is found'
+    required: false
+    default: 'false'
+  run-all-files:
+    description: 'Run on all files instead of changed files'
+    required: false
+    default: 'true'
+  additional-hooks:
+    description: 'Comma-separated list of additional hooks to run'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Detect pre-commit config
+      id: detect-config
+      shell: bash
+      run: |
+        CONFIG_PATH=""
+        
+        # Check for custom config first
+        if [ -n "${{ inputs.custom-config }}" ] && [ -f "${{ inputs.custom-config }}" ]; then
+          CONFIG_PATH="${{ inputs.custom-config }}"
+        fi
+        
+        # Check for standard pre-commit config
+        if [ -z "$CONFIG_PATH" ] && [ -f ".pre-commit-config.yaml" ]; then
+          CONFIG_PATH=".pre-commit-config.yaml"
+        fi
+        if [ -z "$CONFIG_PATH" ] && [ -f ".pre-commit-config.yml" ]; then
+          CONFIG_PATH=".pre-commit-config.yml"
+        fi
+        
+        # Technology-specific configs
+        if [ -z "$CONFIG_PATH" ]; then
+          case "${{ inputs.technology }}" in
+            python|ansible)
+              if [ -f ".pre-commit-config.yaml" ]; then
+                CONFIG_PATH=".pre-commit-config.yaml"
+              fi
+              ;;
+            nodejs)
+              if [ -f ".husky/pre-commit" ]; then
+                CONFIG_PATH=".husky/pre-commit"
+              fi
+              ;;
+            go)
+              if [ -f ".golangci.yml" ]; then
+                CONFIG_PATH=".golangci.yml"
+              fi
+              ;;
+            rust)
+              if [ -f ".rustfmt.toml" ]; then
+                CONFIG_PATH=".rustfmt.toml"
+              fi
+              ;;
+            java)
+              if [ -f "checkstyle.xml" ]; then
+                CONFIG_PATH="checkstyle.xml"
+              fi
+              ;;
+            docker)
+              if [ -f ".hadolint.yaml" ]; then
+                CONFIG_PATH=".hadolint.yaml"
+              fi
+              ;;
+          esac
+        fi
+        
+        if [ -n "$CONFIG_PATH" ]; then
+          echo "config_found=true" >> "$GITHUB_OUTPUT"
+          echo "config_path=$CONFIG_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found pre-commit config: $CONFIG_PATH"
+        else
+          echo "config_found=false" >> "$GITHUB_OUTPUT"
+          echo "config_path=" >> "$GITHUB_OUTPUT"
+          echo "No pre-commit config found"
+          if [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+            echo "Failing because fail-on-missing is true"
+            exit 1
+          fi
+        fi
+
+    - name: Install pre-commit
+      if: steps.detect-config.outputs.config_found == 'true'
+      shell: bash
+      run: |
+        case "${{ inputs.technology }}" in
+          python|ansible)
+            pip install pre-commit
+            ;;
+          nodejs)
+            npm install -g pre-commit
+            ;;
+          go)
+            # golangci-lint is typically used for Go
+            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+            ;;
+          rust)
+            rustup component add rustfmt clippy
+            ;;
+          java)
+            # Maven/Gradle typically handle linting
+            echo "Java linting handled by build tools"
+            ;;
+          docker)
+            # Install hadolint
+            wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+            chmod +x /usr/local/bin/hadolint
+            ;;
+          generic)
+            pip install pre-commit
+            ;;
+        esac
+
+    - name: Run pre-commit hooks
+      if: steps.detect-config.outputs.config_found == 'true'
+      shell: bash
+      run: |
+        CONFIG_PATH="${{ steps.detect-config.outputs.config_path }}"
+        TECH="${{ inputs.technology }}"
+        
+        if [ "${{ inputs.run-all-files }}" == "true" ]; then
+          echo "Running pre-commit on all files..."
+        else
+          echo "Running pre-commit on changed files..."
+        fi
+        
+        case "$TECH" in
+          python|ansible|generic)
+            if [ -f "$CONFIG_PATH" ]; then
+              if [ "${{ inputs.run-all-files }}" == "true" ]; then
+                pre-commit run --all-files --config "$CONFIG_PATH"
+              else
+                pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD --config "$CONFIG_PATH"
+              fi
+            fi
+            ;;
+          nodejs)
+            if [ -f ".husky/pre-commit" ]; then
+              bash .husky/pre-commit
+            elif [ -f "package.json" ]; then
+              # Check for lint-staged or pre-commit script
+              if grep -q "lint-staged" package.json; then
+                npx lint-staged
+              fi
+            fi
+            ;;
+          go)
+            if [ -f ".golangci.yml" ]; then
+              golangci-lint run --config .golangci.yml
+            else
+              golangci-lint run
+            fi
+            ;;
+          rust)
+            cargo fmt --check
+            cargo clippy -- -D warnings
+            ;;
+          java)
+            if [ -f "pom.xml" ]; then
+              mvn checkstyle:check
+            elif [ -f "build.gradle" ]; then
+              gradle check
+            fi
+            ;;
+          docker)
+            if [ -f ".hadolint.yaml" ]; then
+              hadolint Dockerfile
+            fi
+            ;;
+        esac
+        
+        # Run additional hooks if specified
+        if [ -n "${{ inputs.additional-hooks }}" ]; then
+          IFS=',' read -ra HOOKS <<< "${{ inputs.additional-hooks }}"
+          for hook in "${HOOKS[@]}"; do
+            echo "Running additional hook: $hook"
+            if command -v "$hook" &> /dev/null; then
+              $hook
+            else
+              echo "Hook $hook not found, skipping"
+            fi
+          done
+        fi
+
+    - name: Report pre-commit results
+      if: always()
+      shell: bash
+      run: |
+        if [ "${{ steps.detect-config.outputs.config_found }}" == "true" ]; then
+          echo "✅ Pre-commit completed successfully"
+        else
+          echo "⚠️ No pre-commit config found (skipped)"
+        fi

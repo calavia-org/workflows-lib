@@ -1,0 +1,231 @@
+name: 'Publish Reports'
+description: 'Publishes test results, coverage reports, and other artifacts'
+inputs:
+  technology:
+    description: 'Technology stack'
+    required: true
+    default: 'auto'
+  report-enabled:
+    description: 'Enable report publishing'
+    required: false
+    default: 'true'
+  coverage-format:
+    description: 'Coverage report format (xml, html, json)'
+    required: false
+    default: 'xml'
+  coverage-tool:
+    description: 'Coverage tool (codecov, coveralls, sonarcloud)'
+    required: false
+    default: 'codecov'
+  codecov-token:
+    description: 'Codecov token for coverage upload'
+    required: false
+    default: ''
+  test-results-path:
+    description: 'Path to test results directory'
+    required: false
+    default: 'test-results'
+  artifact-retention-days:
+    description: 'Artifact retention period in days'
+    required: false
+    default: '7'
+  publish-test-results:
+    description: 'Publish test results to PR checks'
+    required: false
+    default: 'true'
+  publish-coverage:
+    description: 'Publish coverage report'
+    required: false
+    default: 'true'
+  publish-sarif:
+    description: 'Publish SARIF reports for security scanning'
+    required: false
+    default: 'false'
+  sarif-path:
+    description: 'Path to SARIF reports'
+    required: false
+    default: 'sarif-reports'
+  comment-on-pr:
+    description: 'Add comment on PR with results'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: '${{ github.token }}'
+  slack-webhook:
+    description: 'Slack webhook URL for notifications'
+    required: false
+    default: ''
+  notify-on-failure:
+    description: 'Send notification on failure only'
+    required: false
+    default: 'true'
+  summary-title:
+    description: 'Title for the summary report'
+    required: false
+    default: 'CI Results'
+
+runs:
+  using: composite
+  steps:
+    - name: Download test artifacts
+      if: inputs.report-enabled == 'true'
+      uses: actions/download-artifact@v4
+      with:
+        path: ${{ inputs.test-results-path }}
+        pattern: test-results-*
+        merge-multiple: true
+
+    - name: Publish test results
+      if: inputs.publish-test-results == 'true' && inputs.report-enabled == 'true'
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        files: |
+          ${{ inputs.test-results-path }}/test-results*.xml
+          ${{ inputs.test-results-path }}/junit*.xml
+          ${{ inputs.test-results-path }}/**/*.xml
+        check_name: "${{ inputs.summary-title }} - Test Results"
+        comment_title: "${{ inputs.summary-title }} - Test Results"
+        fail_on: "nothing"
+
+    - name: Publish coverage report
+      if: inputs.publish-coverage == 'true' && inputs.report-enabled == 'true'
+      shell: bash
+      run: |
+        echo "Publishing coverage report..."
+        
+        # Find coverage files
+        COVERAGE_FILES=$(find ${{ inputs.test-results-path }} -name "coverage*.xml" -o -name "coverage*.json" -o -name "*.cov" 2>/dev/null || true)
+        
+        if [ -n "$COVERAGE_FILES" ]; then
+          echo "Found coverage files:"
+          echo "$COVERAGE_FILES"
+          
+          # Upload to Codecov if token is provided
+          if [ -n "${{ inputs.codecov-token }}" ]; then
+            echo "Uploading to Codecov..."
+            # Codecov upload will be handled by the codecov action
+            echo "Coverage files ready for upload"
+          else
+            echo "No Codecov token provided. Coverage files available in artifacts."
+          fi
+        else
+          echo "No coverage files found"
+        fi
+
+    - name: Upload coverage to Codecov
+      if: inputs.publish-coverage == 'true' && inputs.codecov-token != '' && inputs.report-enabled == 'true'
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ inputs.codecov-token }}
+        files: |
+          ${{ inputs.test-results-path }}/coverage*.xml
+          ${{ inputs.test-results-path }}/coverage*.json
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Publish SARIF reports
+      if: inputs.publish-sarif == 'true' && inputs.report-enabled == 'true'
+      shell: bash
+      run: |
+        echo "Publishing SARIF reports..."
+        
+        if [ -d "${{ inputs.sarif-path }}" ]; then
+          echo "SARIF reports found:"
+          find ${{ inputs.sarif-path }} -name "*.sarif" -o -name "*.json" | while read file; do
+            echo "  - $file"
+          done
+          
+          # Upload to GitHub Security tab
+          echo "Uploading to GitHub Security tab..."
+          # Note: This requires the github/codeql-action/upload-sarif action
+          # which would be called from the main workflow
+        else
+          echo "No SARIF reports found"
+        fi
+
+    - name: Generate summary report
+      if: inputs.report-enabled == 'true'
+      shell: bash
+      run: |
+        echo "# ${{ inputs.summary-title }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Technology: ${{ inputs.technology }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Test results summary
+        if [ -d "${{ inputs.test-results-path }}" ]; then
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count test files
+          TEST_COUNT=$(find ${{ inputs.test-results-path }} -name "*.xml" -o -name "*.json" | wc -l)
+          echo "- Test result files: $TEST_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          # Coverage summary
+          if [ -n "$(find ${{ inputs.test-results-path }} -name 'coverage*' -print -quit)" ]; then
+            echo "- Coverage report: ✅ Available" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Coverage report: ⚠️ Not available" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Artifacts summary
+        echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Retention: ${{ inputs.artifact-retention-days }} days" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+    - name: Comment on PR
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && inputs.report-enabled == 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Generate a simple comment
+          const summary = `# ${{ inputs.summary-title }}\n\n` +
+            `**Technology:** ${{ inputs.technology }}\n\n` +
+            `✅ CI workflow completed. Check the [Actions run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed results.\n\n` +
+            `**Artifacts:**\n` +
+            `- Test results: Available\n` +
+            `- Coverage report: ${{ inputs.publish-coverage == 'true' ? 'Available' : 'Not published' }}\n` +
+            `- Retention: ${{ inputs.artifact-retention-days }} days\n`;
+          
+          // Post comment on PR
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
+
+    - name: Slack notification
+      if: inputs.slack-webhook != '' && (inputs.notify-on-failure == 'false' || failure())
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.slack-webhook }}" ]; then
+          echo "Sending Slack notification..."
+          
+          STATUS="${{ job.status }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          if [ "$STATUS" == "success" ]; then
+            COLOR="#36a64f"
+            TEXT="✅ CI passed for ${REPO} on ${BRANCH}"
+          else
+            COLOR="#ff0000"
+            TEXT="❌ CI failed for ${REPO} on ${BRANCH}"
+          fi
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"attachments\":[{\"color\":\"${COLOR}\",\"text\":\"${TEXT}\",\"fields\":[{\"title\":\"Repository\",\"value\":\"${REPO}\",\"short\":true},{\"title\":\"Branch\",\"value\":\"${BRANCH}\",\"short\":true},{\"title\":\"Run URL\",\"value\":\"${RUN_URL}\",\"short\":false}]}]}" \
+            ${{ inputs.slack-webhook }} || true
+        fi

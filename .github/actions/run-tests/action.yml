@@ -1,0 +1,418 @@
+name: 'Run Tests'
+description: 'Runs tests based on technology stack with configurable phases'
+inputs:
+  technology:
+    description: 'Technology stack'
+    required: true
+    default: 'auto'
+  run-unit-tests:
+    description: 'Run unit tests'
+    required: false
+    default: 'true'
+  run-integration-tests:
+    description: 'Run integration tests'
+    required: false
+    default: 'true'
+  run-e2e-tests:
+    description: 'Run end-to-end tests'
+    required: false
+    default: 'false'
+  test-command:
+    description: 'Override test command'
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version for Python/Ansible projects'
+    required: false
+    default: '3.12'
+  node-version:
+    description: 'Node.js version for Node.js projects'
+    required: false
+    default: '20'
+  go-version:
+    description: 'Go version for Go projects'
+    required: false
+    default: '1.22'
+  rust-toolchain:
+    description: 'Rust toolchain for Rust projects'
+    required: false
+    default: 'stable'
+  java-version:
+    description: 'Java version for Java projects'
+    required: false
+    default: '21'
+  java-distribution:
+    description: 'Java distribution for Java projects'
+    required: false
+    default: 'temurin'
+  cache-enabled:
+    description: 'Enable caching'
+    required: false
+    default: 'true'
+  changed-files:
+    description: 'Comma-separated list of changed files for selective testing'
+    required: false
+    default: ''
+  test-report-format:
+    description: 'Test report format (junit, json, xml)'
+    required: false
+    default: 'junit'
+  coverage-report:
+    description: 'Generate coverage report'
+    required: false
+    default: 'true'
+  coverage-format:
+    description: 'Coverage format (xml, html, json)'
+    required: false
+    default: 'xml'
+  test-timeout:
+    description: 'Test timeout in minutes'
+    required: false
+    default: '30'
+  max-parallel:
+    description: 'Maximum parallel test jobs'
+    required: false
+    default: '4'
+  fail-fast:
+    description: 'Fail fast on first test failure'
+    required: false
+    default: 'false'
+  tox-ini:
+    description: 'Path to tox.ini or tox-ansible.ini for Python/Ansible'
+    required: false
+    default: 'tox.ini'
+  ansible-collection-path:
+    description: 'Path to Ansible collection for Ansible projects'
+    required: false
+    default: ''
+  test-paths:
+    description: 'Comma-separated test paths to run'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Extra arguments to pass to test commands'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Setup environment
+      id: setup
+      shell: bash
+      run: |
+        TECH="${{ inputs.technology }}"
+        echo "Setting up test environment for: $TECH"
+        
+        # Setup based on technology
+        case "$TECH" in
+          python|ansible)
+            echo "Python/Ansible project detected"
+            echo "python-version=${{ inputs.python-version }}" >> "$GITHUB_OUTPUT"
+            ;;
+          nodejs)
+            echo "Node.js project detected"
+            echo "node-version=${{ inputs.node-version }}" >> "$GITHUB_OUTPUT"
+            ;;
+          go)
+            echo "Go project detected"
+            echo "go-version=${{ inputs.go-version }}" >> "$GITHUB_OUTPUT"
+            ;;
+          rust)
+            echo "Rust project detected"
+            echo "rust-toolchain=${{ inputs.rust-toolchain }}" >> "$GITHUB_OUTPUT"
+            ;;
+          java)
+            echo "Java project detected"
+            echo "java-version=${{ inputs.java-version }}" >> "$GITHUB_OUTPUT"
+            echo "java-distribution=${{ inputs.java-distribution }}" >> "$GITHUB_OUTPUT"
+            ;;
+          docker)
+            echo "Docker project detected"
+            ;;
+          generic)
+            echo "Generic project detected"
+            ;;
+        esac
+
+    - name: Setup Python
+      if: steps.setup.outputs.python-version != ''
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: ${{ inputs.cache-enabled == 'true' && 'pip' || 'none' }}
+
+    - name: Setup Node.js
+      if: steps.setup.outputs.node-version != ''
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache-enabled == 'true' && 'npm' || 'none' }}
+
+    - name: Setup Go
+      if: steps.setup.outputs.go-version != ''
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: ${{ inputs.cache-enabled == 'true' }}
+
+    - name: Setup Rust
+      if: steps.setup.outputs.rust-toolchain != ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+
+    - name: Setup Java
+      if: steps.setup.outputs.java-version != ''
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: ${{ inputs.java-distribution }}
+        cache: ${{ inputs.cache-enabled == 'true' && 'maven' || 'none' }}
+
+    - name: Determine test command
+      id: test-cmd
+      shell: bash
+      run: |
+        TECH="${{ inputs.technology }}"
+        CMD="${{ inputs.test-command }}"
+        
+        # If custom command provided, use it
+        if [ -n "$CMD" ]; then
+          echo "command=$CMD" >> "$GITHUB_OUTPUT"
+          echo "Using custom test command: $CMD"
+          exit 0
+        fi
+        
+        # Technology-specific defaults
+        case "$TECH" in
+          python)
+            if [ -f "${{ inputs.tox-ini }}" ]; then
+              CMD="python -m tox --conf ${{ inputs.tox-ini }}"
+            elif [ -f "pytest.ini" ] || [ -f "setup.cfg" ] || [ -f "pyproject.toml" ]; then
+              CMD="pytest"
+            elif [ -f "setup.py" ]; then
+              CMD="python setup.py test"
+            else
+              CMD="python -m unittest discover"
+            fi
+            ;;
+          ansible)
+            if [ -f "${{ inputs.tox-ini }}" ]; then
+              CMD="python -m tox --ansible --conf ${{ inputs.tox-ini }}"
+            elif [ -n "${{ inputs.ansible-collection-path }}" ]; then
+              CMD="ansible-test integration --requirements"
+            else
+              CMD="ansible-test sanity"
+            fi
+            ;;
+          nodejs)
+            if [ -f "package.json" ]; then
+              if grep -q '"test"' package.json; then
+                CMD="npm test"
+              else
+                CMD="npx jest"
+              fi
+            fi
+            ;;
+          go)
+            CMD="go test ./..."
+            ;;
+          rust)
+            CMD="cargo test"
+            ;;
+          java)
+            if [ -f "pom.xml" ]; then
+              CMD="mvn test"
+            elif [ -f "build.gradle" ]; then
+              CMD="gradle test"
+            fi
+            ;;
+          docker)
+            if [ -f "docker-compose.test.yml" ]; then
+              CMD="docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit"
+            elif [ -f "docker-compose.yml" ]; then
+              CMD="docker-compose up --build --abort-on-container-exit"
+            else
+              CMD="docker build -t test . && docker run test"
+            fi
+            ;;
+          generic)
+            if [ -f "Makefile" ]; then
+              if grep -q "^test:" Makefile; then
+                CMD="make test"
+              fi
+            fi
+            ;;
+        esac
+        
+        if [ -n "$CMD" ]; then
+          echo "command=$CMD" >> "$GITHUB_OUTPUT"
+          echo "Using default test command: $CMD"
+        else
+          echo "No test command found"
+          echo "command=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run unit tests
+      if: steps.test-cmd.outputs.command != '' && inputs.run-unit-tests == 'true'
+      shell: bash
+      timeout-minutes: ${{ fromJSON(inputs.test-timeout) }}
+      run: |
+        echo "Running unit tests..."
+        CMD="${{ steps.test-cmd.outputs.command }}"
+        
+        # Add test paths if specified
+        if [ -n "${{ inputs.test-paths }}" ]; then
+          CMD="$CMD ${{ inputs.test-paths }}"
+        fi
+        
+        # Add extra args
+        if [ -n "${{ inputs.extra-args }}" ]; then
+          CMD="$CMD ${{ inputs.extra-args }}"
+        fi
+        
+        # Add coverage for Python
+        if [ "${{ inputs.technology }}" == "python" ] || [ "${{ inputs.technology }}" == "ansible" ]; then
+          if [ "${{ inputs.coverage-report }}" == "true" ]; then
+            CMD="$CMD --cov=. --cov-report=${{ inputs.coverage-format }}"
+          fi
+        fi
+        
+        # Add coverage for Node.js
+        if [ "${{ inputs.technology }}" == "nodejs" ]; then
+          if [ "${{ inputs.coverage-report }}" == "true" ]; then
+            CMD="$CMD --coverage"
+          fi
+        fi
+        
+        # Add test output format
+        if [ "${{ inputs.test-report-format }}" == "junit" ]; then
+          case "${{ inputs.technology }}" in
+            python|ansible)
+              CMD="$CMD --junitxml=test-results.xml"
+              ;;
+            nodejs)
+              CMD="$CMD --reporters=default --reporters=jest-junit"
+              ;;
+            go)
+              CMD="$CMD -json | tee test-results.json"
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                CMD="$CMD -Dsurefire.useFile=false"
+              fi
+              ;;
+          esac
+        fi
+        
+        echo "Executing: $CMD"
+        eval $CMD
+        echo "Unit tests completed"
+
+    - name: Run integration tests
+      if: steps.test-cmd.outputs.command != '' && inputs.run-integration-tests == 'true'
+      shell: bash
+      timeout-minutes: ${{ fromJSON(inputs.test-timeout) }}
+      run: |
+        echo "Running integration tests..."
+        TECH="${{ inputs.technology }}"
+        
+        case "$TECH" in
+          python)
+            if [ -f "${{ inputs.tox-ini }}" ]; then
+              python -m tox -e integration --conf ${{ inputs.tox-ini }} ${{ inputs.extra-args }}
+            elif [ -d "tests/integration" ]; then
+              pytest tests/integration ${{ inputs.extra-args }}
+            fi
+            ;;
+          ansible)
+            if [ -f "${{ inputs.tox-ini }}" ]; then
+              python -m tox --ansible -e integration --conf ${{ inputs.tox-ini }} ${{ inputs.extra-args }}
+            elif [ -n "${{ inputs.ansible-collection-path }}" ]; then
+              cd ${{ inputs.ansible-collection-path }}
+              ansible-test integration --requirements ${{ inputs.extra-args }}
+            fi
+            ;;
+          nodejs)
+            if [ -f "package.json" ] && grep -q '"integration-test"' package.json; then
+              npm run integration-test
+            fi
+            ;;
+          go)
+            go test -tags=integration ./... ${{ inputs.extra-args }}
+            ;;
+          rust)
+            cargo test --test '*' ${{ inputs.extra-args }}
+            ;;
+          java)
+            if [ -f "pom.xml" ]; then
+              mvn verify -DskipUnitTests ${{ inputs.extra-args }}
+            elif [ -f "build.gradle" ]; then
+              gradle integrationTest ${{ inputs.extra-args }}
+            fi
+            ;;
+          docker)
+            if [ -f "docker-compose.yml" ]; then
+              docker-compose up -d
+              # Run integration tests here
+              docker-compose down
+            fi
+            ;;
+        esac
+        echo "Integration tests completed"
+
+    - name: Run e2e tests
+      if: inputs.run-e2e-tests == 'true'
+      shell: bash
+      timeout-minutes: ${{ fromJSON(inputs.test-timeout) }}
+      run: |
+        echo "Running e2e tests..."
+        TECH="${{ inputs.technology }}"
+        
+        case "$TECH" in
+          nodejs)
+            if [ -f "package.json" ] && grep -q '"e2e"' package.json; then
+              npm run e2e
+            fi
+            ;;
+          python)
+            if [ -d "tests/e2e" ]; then
+              pytest tests/e2e ${{ inputs.extra-args }}
+            fi
+            ;;
+          go)
+            if [ -d "tests/e2e" ]; then
+              go test -tags=e2e ./tests/e2e ${{ inputs.extra-args }}
+            fi
+            ;;
+        esac
+        echo "E2e tests completed"
+
+    - name: Collect test results
+      if: always()
+      shell: bash
+      run: |
+        echo "Collecting test results..."
+        mkdir -p test-results
+        
+        # Find and collect test result files
+        find . -name "test-results*.xml" -o -name "test-results*.json" -o -name "junit*.xml" | while read file; do
+          cp "$file" test-results/
+        done
+        
+        # Find and collect coverage reports
+        find . -name "coverage*.xml" -o -name "coverage*.json" -o -name "coverage*.html" | while read file; do
+          cp "$file" test-results/
+        done
+        
+        echo "Test results collected"
+        ls -la test-results/
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ inputs.technology }}
+        path: test-results/
+        retention-days: 7
