@@ -1,5 +1,5 @@
-name: 'Sign Docker'
-description: 'Signs Docker image with Cosign'
+name: 'Sign Container'
+description: 'Signs container image with Cosign'
 inputs:
   image-tag:
     description: 'Full image tag to sign'
