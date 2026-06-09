@@ -63,10 +63,12 @@ runs:
       with:
         go-version: ${{ inputs.go-version }}
     - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
       if: inputs.technology == 'rust'
-      with:
-        toolchain: ${{ inputs.rust-toolchain }}
+      shell: bash
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${{ inputs.rust-toolchain }}
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        source "$HOME/.cargo/env"
     - name: Setup Java
       uses: actions/setup-java@v4
       if: inputs.technology == 'java'
