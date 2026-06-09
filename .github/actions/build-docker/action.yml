@@ -35,8 +35,10 @@ inputs:
 outputs:
   image-tag:
     description: 'Full image tag with version'
+    value: ${{ steps.build.outputs.image-tag }}
   image-name:
     description: 'Image name'
+    value: ${{ steps.build.outputs.image-name }}
 runs:
   using: composite
   steps:

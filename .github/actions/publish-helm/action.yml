@@ -17,6 +17,7 @@ inputs:
 outputs:
   chart-url:
     description: 'URL to published chart'
+    value: ${{ steps.push.outputs.chart-url }}
 runs:
   using: composite
   steps:

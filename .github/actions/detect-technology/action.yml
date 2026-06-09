@@ -3,8 +3,10 @@ description: 'Detects the technology stack of the repository based on file indic
 outputs:
   technologies:
     description: 'Comma-separated list of detected technologies'
+    value: ${{ steps.detect.outputs.technologies }}
   primary:
     description: 'Primary technology for the repository'
+    value: ${{ steps.detect.outputs.primary }}
 runs:
   using: composite
   steps:

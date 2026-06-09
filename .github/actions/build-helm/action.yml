@@ -22,8 +22,10 @@ inputs:
 outputs:
   chart-path:
     description: 'Path to packaged chart'
+    value: ${{ steps.build.outputs.chart-path }}
   chart-name:
     description: 'Name of the chart'
+    value: ${{ steps.build.outputs.chart-name }}
 runs:
   using: composite
   steps:

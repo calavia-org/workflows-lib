@@ -14,6 +14,7 @@ inputs:
 outputs:
   provenance-path:
     description: 'Path to provenance file'
+    value: ${{ steps.sign.outputs.provenance-path }}
 runs:
   using: composite
   steps:
