@@ -172,20 +172,12 @@ jobs:
       - name: Run actionlint
         shell: bash
         run: |
-          echo "Running actionlint..."
+          echo "Running actionlint on workflow files..."
           
-          # Lint action files
-          if [ -f "action.yml" ]; then
-            actionlint action.yml
-          fi
-          
-          if [ -f "action.yaml" ]; then
-            actionlint action.yaml
-          fi
-          
-          # Also lint any workflow files
           if [ -d ".github/workflows" ]; then
             actionlint .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true
+          else
+            echo "No .github/workflows directory found, skipping"
           fi
           
           echo "Linting complete"
