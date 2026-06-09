@@ -110,10 +110,8 @@ jobs:
 
   release:
     name: Release
-    needs: validate
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: always() && !cancelled()
     outputs:
       version: ${{ steps.tag.outputs.new_version }}
       tag: ${{ steps.tag.outputs.new_tag }}
