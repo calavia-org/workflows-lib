@@ -91,3 +91,15 @@ runs:
         echo "image-tag=$FULL_TAG" >> "$GITHUB_OUTPUT"
         echo "image-name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
         echo "✅ Built image: $FULL_TAG"
+    - name: Save Docker image
+      shell: bash
+      run: |
+        FULL_TAG="${{ steps.build.outputs.image-tag }}"
+        docker save "$FULL_TAG" -o docker-image.tar
+        echo "✅ Saved image to docker-image.tar"
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: docker-image.tar
+        retention-days: 7
