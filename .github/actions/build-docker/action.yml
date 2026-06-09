@@ -62,9 +62,11 @@ runs:
         
         if [ -z "$IMAGE_NAME" ]; then
           IMAGE_NAME="${{ github.repository }}"
+        elif ! echo "$IMAGE_NAME" | grep -q '/'; then
+          IMAGE_NAME="${{ github.repository_owner }}/$IMAGE_NAME"
         fi
         
-        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
         FULL_TAG="ghcr.io/$IMAGE_NAME:$VERSION"
         
         if [ "${{ inputs.is-ansible-ee }}" == "true" ]; then
