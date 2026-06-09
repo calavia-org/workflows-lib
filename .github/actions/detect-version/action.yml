@@ -26,6 +26,23 @@ runs:
         # If custom version source provided, use it
         if [ "${{ inputs.version-source }}" != "auto" ] && [ -f "${{ inputs.version-source }}" ]; then
           VERSION_FILE="${{ inputs.version-source }}"
+          case "$VERSION_FILE" in
+            *.yml|*.yaml)
+              VERSION=$(grep "^version:" "$VERSION_FILE" | head -1 | sed 's/version: //' | tr -d ' "')
+              ;;
+            *.json)
+              VERSION=$(grep '"version"' "$VERSION_FILE" | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+              ;;
+            *.toml)
+              VERSION=$(grep "^version" "$VERSION_FILE" | head -1 | sed 's/version = //' | tr -d ' "')
+              ;;
+            *.py)
+              VERSION=$(grep "version=" "$VERSION_FILE" | head -1 | sed "s/.*version='\(.*\)'.*$/\1/" | sed 's/.*version="\(.*\)".*$/\1/')
+              ;;
+            *)
+              VERSION=$(cat "$VERSION_FILE" | tr -d ' \n')
+              ;;
+          esac
         fi
         
         # Auto-detect from standard files (priority order)
