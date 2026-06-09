@@ -38,11 +38,6 @@ on:
         type: string
         required: false
         default: ''
-      validate-action:
-        description: 'Validate action.yml structure'
-        type: boolean
-        required: false
-        default: true
       dry-run:
         description: 'Perform a dry run (no actual changes)'
         type: boolean
@@ -69,51 +64,10 @@ on:
         value: ${{ jobs.release.outputs.major-tag }}
 
 jobs:
-  validate:
-    name: Validate Action
-    runs-on: ${{ inputs.runner-label }}
-    timeout-minutes: 5
-    if: ${{ inputs.validate-action }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Validate action.yml
-        shell: bash
-        run: |
-          if [ ! -f "action.yml" ]; then
-            echo "action.yml not found in repository root"
-            exit 1
-          fi
-          
-          if ! grep -q "^name:" action.yml; then
-            echo "action.yml missing 'name' field"
-            exit 1
-          fi
-          
-          if ! grep -q "^description:" action.yml; then
-            echo "action.yml missing 'description' field"
-            exit 1
-          fi
-          
-          if ! grep -q "^runs:" action.yml; then
-            echo "action.yml missing 'runs' section"
-            exit 1
-          fi
-          
-          if ! grep -A 5 "^runs:" action.yml | grep -q "using:"; then
-            echo "action.yml missing 'using' field in runs section"
-            exit 1
-          fi
-          
-          echo "action.yml structure is valid"
-
   release:
     name: Release
-    needs: validate
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: always() && !cancelled()
     outputs:
       version: ${{ steps.tag.outputs.new_version }}
       tag: ${{ steps.tag.outputs.new_tag }}
