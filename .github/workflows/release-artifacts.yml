@@ -350,7 +350,7 @@ jobs:
     needs: [detect, build-binary, build-docker, build-helm, sign-binary, sign-docker, sign-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-github-release && always() && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
     outputs:
       release-url: ${{ steps.publish.outputs.release-url }}
       release-id: ${{ steps.publish.outputs.release-id }}
@@ -376,7 +376,7 @@ jobs:
     needs: [detect, build-docker, sign-docker]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-ghcr && always() && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') }}
+    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') }}
     steps:
       - uses: calavia-org/workflows-lib/.github/actions/publish-ghcr@v0
         with:
@@ -389,7 +389,7 @@ jobs:
     needs: [detect, build-binary, sign-binary]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-package-manager && always() && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
+    if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
       - uses: calavia-org/workflows-lib/.github/actions/publish-package@v0
@@ -405,7 +405,7 @@ jobs:
     needs: [detect, build-helm, sign-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-helm-chart && always() && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
       - uses: calavia-org/workflows-lib/.github/actions/publish-helm@v0
@@ -419,7 +419,7 @@ jobs:
     needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.rollback-on-failure && failure() }}
+    if: ${{ inputs.rollback-on-failure && failure() && needs.detect.result == 'success' }}
     steps:
       - uses: calavia-org/workflows-lib/.github/actions/rollback-release@v0
         with:
@@ -432,7 +432,7 @@ jobs:
     needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 5
-    if: ${{ inputs.notify-on-release && always() }}
+    if: ${{ inputs.notify-on-release && always() && needs.detect.result == 'success' }}
     steps:
       - name: Slack notification
         if: inputs.slack-webhook != ''
