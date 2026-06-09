@@ -30,8 +30,10 @@ inputs:
 outputs:
   release-url:
     description: 'URL to the created release'
+    value: ${{ steps.release.outputs.url }}
   release-id:
     description: 'ID of the created release'
+    value: ${{ steps.release.outputs.id }}
 runs:
   using: composite
   steps:

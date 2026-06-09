@@ -31,6 +31,7 @@ inputs:
 outputs:
   publish-url:
     description: 'URL to published package'
+    value: ${{ steps.publish.outputs.publish-url }}
 runs:
   using: composite
   steps:

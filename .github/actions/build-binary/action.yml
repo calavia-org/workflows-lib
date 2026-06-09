@@ -42,8 +42,10 @@ inputs:
 outputs:
   artifact-path:
     description: 'Path to built binary artifact'
+    value: ${{ steps.build.outputs.artifact-path }}
   artifact-name:
     description: 'Name of the artifact'
+    value: ${{ steps.build.outputs.artifact-name }}
 runs:
   using: composite
   steps:
