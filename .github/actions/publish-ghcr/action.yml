@@ -57,6 +57,7 @@ runs:
           if [ -n "$tag" ]; then
             BASE=$(echo "$IMAGE" | sed 's/:.*//')
             ADDITIONAL="$BASE:$tag"
+            docker tag "$IMAGE" "$ADDITIONAL"
             docker push "$ADDITIONAL"
             PUSHED="$PUSHED,$ADDITIONAL"
             echo "Pushed: $ADDITIONAL"
