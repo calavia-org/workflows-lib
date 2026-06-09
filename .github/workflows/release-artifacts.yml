@@ -239,6 +239,8 @@ jobs:
           version-source: ${{ inputs.version-source }}
       - uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
         id: artifacts
+        with:
+          artifacts: ${{ inputs.artifacts }}
 
   build-binary:
     name: Build Binary

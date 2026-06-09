@@ -1,5 +1,10 @@
 name: 'Detect Artifacts'
-description: 'Auto-detects artifacts to build based on repository files'
+description: 'Auto-detects artifacts to build based on repository files or explicit input'
+inputs:
+  artifacts:
+    description: 'Explicit comma-separated list of artifacts (binary,docker,helm). Use "auto" to detect from repo files.'
+    required: false
+    default: 'auto'
 outputs:
   artifacts:
     description: 'Comma-separated list of artifacts to build (binary,docker,helm)'
@@ -12,8 +17,39 @@ runs:
       id: detect
       shell: bash
       run: |
-        ARTIFACTS=""
+        ARTIFACTS="${{ inputs.artifacts }}"
         BINARY_TYPE=""
+        
+        # If explicit artifacts provided (not auto), use them directly
+        if [ "$ARTIFACTS" != "auto" ] && [ -n "$ARTIFACTS" ]; then
+          echo "artifacts=$ARTIFACTS" >> "$GITHUB_OUTPUT"
+          # Try to detect binary type for explicit binary artifact
+          if echo "$ARTIFACTS" | grep -q "binary"; then
+            if [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+              BINARY_TYPE="java"
+            elif [ -f "package.json" ]; then
+              BINARY_TYPE="nodejs"
+            elif [ -f "go.mod" ]; then
+              BINARY_TYPE="go"
+            elif [ -f "Cargo.toml" ]; then
+              BINARY_TYPE="rust"
+            elif [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "setup.cfg" ]; then
+              BINARY_TYPE="python"
+            elif [ -f "galaxy.yml" ]; then
+              BINARY_TYPE="ansible"
+            elif [ -f "Makefile" ] || [ -f "VERSION" ] || [ -f "version.txt" ]; then
+              BINARY_TYPE="generic"
+            fi
+            echo "binary-type=$BINARY_TYPE" >> "$GITHUB_OUTPUT"
+            echo "✅ Artifacts from input: $ARTIFACTS (binary type: $BINARY_TYPE)"
+          else
+            echo "binary-type=" >> "$GITHUB_OUTPUT"
+            echo "✅ Artifacts from input: $ARTIFACTS"
+          fi
+          exit 0
+        fi
+        
+        ARTIFACTS=""
         
         # Check for Dockerfile
         if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
