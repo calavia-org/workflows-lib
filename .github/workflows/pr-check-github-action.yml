@@ -164,7 +164,8 @@ jobs:
             aarch64|arm64) ARCH="arm64" ;;
           esac
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-          curl -sL "https://github.com/rhysd/actionlint/releases/latest/download/actionlint-${OS}-${ARCH}.tar.gz" | tar xz
+          VERSION=$(curl -sL "https://api.github.com/repos/rhysd/actionlint/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          curl -sL "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_${OS}_${ARCH}.tar.gz" | tar xz
           sudo mv actionlint /usr/local/bin/
           echo "actionlint installed"
 
