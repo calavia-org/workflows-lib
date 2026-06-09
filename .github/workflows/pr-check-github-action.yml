@@ -158,8 +158,13 @@ jobs:
       - name: Install actionlint
         shell: bash
         run: |
-          # Install actionlint
-          curl -sL https://github.com/rhysd/actionlint/releases/latest/download/actionlint_$(uname -s)_$(uname -m).tar.gz | tar xz
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+          esac
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          curl -sL "https://github.com/rhysd/actionlint/releases/latest/download/actionlint-${OS}-${ARCH}.tar.gz" | tar xz
           sudo mv actionlint /usr/local/bin/
           echo "actionlint installed"
 

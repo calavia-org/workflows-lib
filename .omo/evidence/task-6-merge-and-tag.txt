@@ -1,0 +1,30 @@
+# Task 6 Evidence: Merge and Tag
+
+## Branch Created
+- Branch: `fix/remote-action-refs` in workflows-lib
+- Created from: main
+
+## Changes Committed
+Files modified (3):
+- `.github/workflows/release-artifacts.yml` (28 lines changed)
+- `.github/workflows/pr-check-and-test.yml` (10 lines changed)
+- `docs/release-artifacts.md` (29 lines added)
+
+Commit: `c5cda88` - "fix(ci): convert local action refs to remote paths and update docs"
+
+## PR Created and Merged
+- PR: https://github.com/calavia-org/workflows-lib/pull/11
+- Merged via: `gh pr merge --squash`
+- Merge commit: `e217618`
+
+## Latest Main Pulled
+- Confirmed: main branch updated via `git pull origin main --rebase`
+- Main now at: `e217618` (HEAD -> main, origin/main, origin/HEAD)
+
+## v0 Tag Verification
+- v0 tag points to: `e217618` (v0.4.1)
+- Verified via: `git log --oneline --decorate --tags | head -10`
+- Previous v0 was at: `585222c` (v0.4.0)
+
+## Summary
+✅ All verification steps passed. v0 tag correctly updated by release.yml workflow.
