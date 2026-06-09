@@ -5,9 +5,37 @@ on:
     branches: [main, 'release/*']
 
 jobs:
-  pr-check:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-github-action.yml@v0
-    with:
-      validate-action: false
-      run-lint: true
-      run-test: false
+  lint:
+    name: Lint Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+          esac
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          VERSION=$(curl -sL "https://api.github.com/repos/rhysd/actionlint/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          curl -sL "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_${OS}_${ARCH}.tar.gz" | tar xz
+          sudo mv actionlint /usr/local/bin/
+          echo "actionlint installed"
+
+      - name: Run actionlint
+        shell: bash
+        run: |
+          echo "Running actionlint on workflow files..."
+          
+          if [ -d ".github/workflows" ]; then
+            actionlint .github/workflows/*.yml .github/workflows/*.yaml
+          else
+            echo "No .github/workflows directory found, skipping"
+          fi
+          
+          echo "Linting complete"
