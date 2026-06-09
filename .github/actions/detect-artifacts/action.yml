@@ -8,8 +8,10 @@ inputs:
 outputs:
   artifacts:
     description: 'Comma-separated list of artifacts to build (binary,docker,helm)'
+    value: ${{ steps.detect.outputs.artifacts }}
   binary-type:
     description: 'Type of binary artifact (java,nodejs,go,python,rust,ansible,generic)'
+    value: ${{ steps.detect.outputs.binary-type }}
 runs:
   using: composite
   steps:

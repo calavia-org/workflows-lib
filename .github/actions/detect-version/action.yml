@@ -8,10 +8,13 @@ inputs:
 outputs:
   version:
     description: 'Detected version string'
+    value: ${{ steps.detect.outputs.version }}
   version-file:
     description: 'Path to the version file used'
+    value: ${{ steps.detect.outputs.version-file }}
   technology:
     description: 'Detected technology'
+    value: ${{ steps.detect.outputs.technology }}
 runs:
   using: composite
   steps:
