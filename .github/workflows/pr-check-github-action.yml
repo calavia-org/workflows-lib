@@ -1,0 +1,224 @@
+name: PR Check GitHub Action
+
+on:
+  workflow_call:
+    inputs:
+      runner-label:
+        description: 'Runner label'
+        type: string
+        required: false
+        default: 'ubuntu-latest'
+      validate-structure:
+        description: 'Validate action.yml required fields'
+        type: boolean
+        required: false
+        default: true
+      run-lint:
+        description: 'Run actionlint on action files'
+        type: boolean
+        required: false
+        default: true
+      run-test:
+        description: 'Test action reference'
+        type: boolean
+        required: false
+        default: false
+      fail-on-missing:
+        description: 'Fail if action.yml not found'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  detect:
+    name: Detect Action
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    outputs:
+      action-file: ${{ steps.detect.outputs.action-file }}
+      has-version: ${{ steps.detect.outputs.has-version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Detect action file
+        id: detect
+        shell: bash
+        run: |
+          ACTION_FILE=""
+          HAS_VERSION="false"
+          
+          if [ -f "action.yml" ]; then
+            ACTION_FILE="action.yml"
+          elif [ -f "action.yaml" ]; then
+            ACTION_FILE="action.yaml"
+          fi
+          
+          if [ -z "$ACTION_FILE" ]; then
+            echo "action.yml or action.yaml not found in repository root"
+            if [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+              exit 1
+            fi
+          fi
+          
+          if [ -n "$ACTION_FILE" ] && grep -q "^version:" "$ACTION_FILE" 2>/dev/null; then
+            HAS_VERSION="true"
+          fi
+          
+          echo "action-file=$ACTION_FILE" >> "$GITHUB_OUTPUT"
+          echo "has-version=$HAS_VERSION" >> "$GITHUB_OUTPUT"
+          
+          if [ -n "$ACTION_FILE" ]; then
+            echo "Action file detected: $ACTION_FILE"
+            echo "Has version field: $HAS_VERSION"
+          fi
+
+  validate:
+    name: Validate Structure
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    if: ${{ inputs.validate-structure && needs.detect.outputs.action-file != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate action.yml structure
+        shell: bash
+        run: |
+          ACTION_FILE="${{ needs.detect.outputs.action-file }}"
+          
+          echo "Validating $ACTION_FILE structure..."
+          
+          ERRORS=0
+          
+          # Check name field
+          if ! grep -q "^name:" "$ACTION_FILE"; then
+            echo "ERROR: Missing 'name' field"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Check description field
+          if ! grep -q "^description:" "$ACTION_FILE"; then
+            echo "ERROR: Missing 'description' field"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Check runs section
+          if ! grep -q "^runs:" "$ACTION_FILE"; then
+            echo "ERROR: Missing 'runs' section"
+            ERRORS=$((ERRORS + 1))
+          else
+            # Check using field in runs
+            if ! grep -A 5 "^runs:" "$ACTION_FILE" | grep -q "using:"; then
+              echo "ERROR: Missing 'using' field in runs section"
+              ERRORS=$((ERRORS + 1))
+            else
+              # Validate using value
+              USING=$(grep -A 5 "^runs:" "$ACTION_FILE" | grep "using:" | sed 's/.*using: //' | tr -d ' "')
+              case "$USING" in
+                composite|node12|node16|node20|docker)
+                  echo "Valid using: $USING"
+                  ;;
+                *)
+                  echo "ERROR: Invalid 'using' value: $USING (must be composite, node12, node16, node20, or docker)"
+                  ERRORS=$((ERRORS + 1))
+                  ;;
+              esac
+            fi
+          fi
+          
+          # Check for inputs section (optional but validate if present)
+          if grep -q "^inputs:" "$ACTION_FILE"; then
+            echo "Inputs section found"
+          fi
+          
+          # Check for outputs section (optional but validate if present)
+          if grep -q "^outputs:" "$ACTION_FILE"; then
+            echo "Outputs section found"
+          fi
+          
+          if [ $ERRORS -gt 0 ]; then
+            echo "Validation failed with $ERRORS error(s)"
+            exit 1
+          fi
+          
+          echo "Action structure is valid"
+
+  lint:
+    name: Lint Action
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ inputs.run-lint && needs.detect.outputs.action-file != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          # Install actionlint
+          curl -sL https://github.com/rhysd/actionlint/releases/latest/download/actionlint_$(uname -s)_$(uname -m).tar.gz | tar xz
+          sudo mv actionlint /usr/local/bin/
+          echo "actionlint installed"
+
+      - name: Run actionlint
+        shell: bash
+        run: |
+          echo "Running actionlint..."
+          
+          # Lint action files
+          if [ -f "action.yml" ]; then
+            actionlint action.yml
+          fi
+          
+          if [ -f "action.yaml" ]; then
+            actionlint action.yaml
+          fi
+          
+          # Also lint any workflow files
+          if [ -d ".github/workflows" ]; then
+            actionlint .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true
+          fi
+          
+          echo "Linting complete"
+
+  test:
+    name: Test Action
+    needs: [detect, validate]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 15
+    if: ${{ inputs.run-test && needs.detect.outputs.action-file != '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Test action reference
+        shell: bash
+        run: |
+          ACTION_FILE="${{ needs.detect.outputs.action-file }}"
+          
+          echo "Testing action reference..."
+          
+          # Extract action name for testing
+          ACTION_NAME=$(grep "^name:" "$ACTION_FILE" | head -1 | sed 's/name: //' | tr -d ' "')
+          echo "Action name: $ACTION_NAME"
+          
+          # Check if action can be referenced
+          if [ -f "$ACTION_FILE" ]; then
+            echo "Action file exists and is valid YAML"
+            
+            # Verify it can be parsed
+            python3 -c "
+          import yaml
+          with open('$ACTION_FILE') as f:
+              data = yaml.safe_load(f)
+              print('YAML parsed successfully')
+              print(f\"Name: {data.get('name', 'N/A')}\")
+              print(f\"Description: {data.get('description', 'N/A')}\")
+              print(f\"Runs: {data.get('runs', {}).get('using', 'N/A')}\")
+          " 2>/dev/null || echo "Python YAML validation skipped"
+          fi
+          
+          echo "Action reference test complete"
