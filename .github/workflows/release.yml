@@ -11,6 +11,6 @@ jobs:
   release:
     uses: calavia-org/workflows-lib/.github/workflows/release-github-action.yml@v0
     with:
-      version-file: 'none'
+      validate-action: false
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
