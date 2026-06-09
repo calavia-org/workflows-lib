@@ -1,5 +1,5 @@
 name: 'Publish to GHCR'
-description: 'Pushes Docker image to GitHub Container Registry'
+description: 'Pushes container image to GitHub Container Registry'
 inputs:
   image-tag:
     description: 'Full image tag to push'

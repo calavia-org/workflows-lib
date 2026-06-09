@@ -178,11 +178,6 @@ on:
         type: string
         required: false
         default: ''
-      is-ansible-ee:
-        description: 'Build Ansible Execution Environment instead of standard Docker'
-        type: boolean
-        required: false
-        default: false
       ee-definition-file:
         description: 'Path to execution-environment.yml for Ansible EE build'
         type: string
@@ -283,15 +278,32 @@ jobs:
           version: ${{ needs.detect.outputs.version }}
           image-name: ${{ inputs.ghcr-image-name }}
           additional-tags: ${{ inputs.ghcr-tags }}
-          is-ansible-ee: ${{ inputs.is-ansible-ee }}
+
+  build-ee:
+    name: Build Execution Environment
+    needs: [detect, build-binary]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'execution-environment') }}
+    outputs:
+      image-tag: ${{ steps.build.outputs.image-tag }}
+      image-name: ${{ steps.build.outputs.image-name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: calavia-org/workflows-lib/.github/actions/build-ee@v0
+        id: build
+        with:
+          version: ${{ needs.detect.outputs.version }}
+          image-name: ${{ inputs.ghcr-image-name }}
+          additional-tags: ${{ inputs.ghcr-tags }}
           ee-definition-file: ${{ inputs.ee-definition-file }}
 
   build-helm:
     name: Build Helm
-    needs: [detect, build-docker]
+    needs: [detect, build-docker, build-ee]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
     outputs:
       chart-path: ${{ steps.build.outputs.chart-path }}
       chart-name: ${{ steps.build.outputs.chart-name }}
@@ -303,8 +315,8 @@ jobs:
           version: ${{ needs.detect.outputs.version }}
           app-version: ${{ needs.detect.outputs.version }}
           chart-path: ${{ inputs.helm-chart-path }}
-          image-name: ${{ needs.build-docker.outputs.image-name }}
-          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+          image-name: ${{ needs.build-docker.outputs.image-name || needs.build-ee.outputs.image-name }}
+          image-tag: ${{ needs.build-docker.outputs.image-tag || needs.build-ee.outputs.image-tag }}
 
   sign-binary:
     name: Sign Binary
@@ -321,16 +333,16 @@ jobs:
           gpg-passphrase: ${{ secrets.gpg-passphrase }}
 
   sign-docker:
-    name: Sign Docker
-    needs: [detect, build-docker]
+    name: Sign Container
+    needs: [detect, build-docker, build-ee]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-docker && contains(needs.detect.outputs.artifacts, 'docker') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
       - uses: calavia-org/workflows-lib/.github/actions/sign-docker@v0
         with:
-          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+          image-tag: ${{ needs.build-docker.outputs.image-tag || needs.build-ee.outputs.image-tag }}
           cosign-key: ${{ secrets.cosign-key }}
 
   sign-helm:
@@ -349,10 +361,10 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
-    needs: [detect, build-binary, build-docker, build-helm, sign-binary, sign-docker, sign-helm]
+    needs: [detect, build-binary, build-docker, build-ee, build-helm, sign-binary, sign-docker, sign-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
     outputs:
       release-url: ${{ steps.publish.outputs.release-url }}
       release-id: ${{ steps.publish.outputs.release-id }}
@@ -375,14 +387,14 @@ jobs:
 
   publish-ghcr:
     name: Publish to GHCR
-    needs: [detect, build-docker, sign-docker]
+    needs: [detect, build-docker, build-ee, sign-docker]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') }}
+    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
     steps:
       - uses: calavia-org/workflows-lib/.github/actions/publish-ghcr@v0
         with:
-          image-tag: ${{ needs.build-docker.outputs.image-tag }}
+          image-tag: ${{ needs.build-docker.outputs.image-tag || needs.build-ee.outputs.image-tag }}
           additional-tags: ${{ inputs.ghcr-tags }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
 
@@ -426,7 +438,7 @@ jobs:
       - uses: calavia-org/workflows-lib/.github/actions/rollback-release@v0
         with:
           release-id: ${{ needs.publish-github-release.outputs.release-id }}
-          image-tags: ${{ needs.build-docker.outputs.image-tag }}
+          image-tags: ${{ needs.build-docker.outputs.image-tag || needs.build-ee.outputs.image-tag }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
 
   notify:

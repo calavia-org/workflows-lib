@@ -2,12 +2,12 @@ name: 'Detect Artifacts'
 description: 'Auto-detects artifacts to build based on repository files or explicit input'
 inputs:
   artifacts:
-    description: 'Explicit comma-separated list of artifacts (binary,docker,helm). Use "auto" to detect from repo files.'
+    description: 'Explicit comma-separated list of artifacts (binary,docker,execution-environment,helm). Use "auto" to detect from repo files.'
     required: false
     default: 'auto'
 outputs:
   artifacts:
-    description: 'Comma-separated list of artifacts to build (binary,docker,helm)'
+    description: 'Comma-separated list of artifacts to build (binary,docker,execution-environment,helm)'
     value: ${{ steps.detect.outputs.artifacts }}
   binary-type:
     description: 'Type of binary artifact (java,nodejs,go,python,rust,ansible,generic)'
@@ -53,9 +53,18 @@ runs:
         
         ARTIFACTS=""
         
-        # Check for Dockerfile
+        # Check for execution-environment.yml (Ansible EE - distinct from Docker)
+        if [ -f "execution-environment.yml" ] || [ -f "execution-environment.yaml" ]; then
+          ARTIFACTS="execution-environment"
+        fi
+        
+        # Check for Dockerfile (only if not an EE - Docker and EE are mutually exclusive)
         if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
-          ARTIFACTS="docker"
+          if [ -n "$ARTIFACTS" ]; then
+            ARTIFACTS="$ARTIFACTS,docker"
+          else
+            ARTIFACTS="docker"
+          fi
         fi
         
         # Check for Helm chart
