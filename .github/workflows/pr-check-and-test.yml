@@ -570,7 +570,7 @@ jobs:
           publish-coverage: ${{ inputs.report-enabled }}
           publish-sarif: false
           comment-on-pr: ${{ inputs.comment-on-pr }}
-          github-token: ${{ inputs.github-token || secrets.github-token }}
+          github-token: ${{ secrets.github-token }}
           slack-webhook: ${{ inputs.slack-webhook }}
           notify-on-failure: ${{ inputs.notify-on-failure }}
           summary-title: ${{ inputs.summary-title }}

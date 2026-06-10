@@ -430,7 +430,7 @@ jobs:
 
   rollback:
     name: Rollback
-    needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
+    needs: [detect, build-docker, build-ee, publish-github-release, publish-ghcr, publish-package, publish-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ inputs.rollback-on-failure && failure() && needs.detect.result == 'success' }}
@@ -443,7 +443,7 @@ jobs:
 
   notify:
     name: Notify
-    needs: [publish-github-release, publish-ghcr, publish-package, publish-helm]
+    needs: [detect, publish-github-release, publish-ghcr, publish-package, publish-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 5
     if: ${{ inputs.notify-on-release && always() && needs.detect.result == 'success' }}
