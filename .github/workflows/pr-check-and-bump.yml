@@ -51,9 +51,12 @@ jobs:
 
       - name: Check no-bump branch pattern
         id: check-no-bump
+        env:
+          BRANCH: ${{ github.head_ref }}
+          PATTERN: ${{ inputs.no-bump-branch-pattern }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          PATTERN="${{ inputs.no-bump-branch-pattern }}"
+          BRANCH="$BRANCH"
+          PATTERN="$PATTERN"
 
           if [ -z "$PATTERN" ]; then
             echo "should_bump=true" >> "$GITHUB_OUTPUT"
@@ -72,9 +75,12 @@ jobs:
       - name: Validate branch name
         id: validate-branch
         if: ${{ inputs.allowed-branch-pattern != '' }}
+        env:
+          BRANCH: ${{ github.head_ref }}
+          PATTERN: ${{ inputs.allowed-branch-pattern }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          PATTERN="${{ inputs.allowed-branch-pattern }}"
+          BRANCH="$BRANCH"
+          PATTERN="$PATTERN"
 
           if [ -z "$PATTERN" ]; then
             echo "valid=true" >> "$GITHUB_OUTPUT"
@@ -92,9 +98,12 @@ jobs:
 
       - name: Validate target branch
         id: validate-target
+        env:
+          TARGET: ${{ github.base_ref }}
+          ALLOWED: ${{ inputs.allowed-target-branches }}
         run: |
-          TARGET="${{ github.base_ref }}"
-          ALLOWED="${{ inputs.allowed-target-branches }}"
+          TARGET="$TARGET"
+          ALLOWED="$ALLOWED"
 
           # Convert comma-separated list to regex pattern
           PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
@@ -109,8 +118,11 @@ jobs:
 
       - name: Parse conventional commits
         id: conventional
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          BASE_BRANCH="${{ github.base_ref }}"
+          BASE_BRANCH="$BASE_BRANCH"
           
           # Get all commits in this PR
           COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --pretty=format:"%s")
@@ -164,7 +176,6 @@ jobs:
           
           # If no conventional commits found, check PR title (for squash merges)
           if [ "$HAS_CONVENTIONAL" = "false" ]; then
-            PR_TITLE="${{ github.event.pull_request.title }}"
             echo "No conventional commits found, checking PR title: $PR_TITLE"
             
             if echo "$PR_TITLE" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:"; then
@@ -192,14 +203,20 @@ jobs:
 
       - name: Fail if branch name invalid
         if: ${{ steps.validate-branch.outputs.valid == 'false' && inputs.fail-on-invalid-branch }}
+        env:
+          BRANCH: ${{ github.head_ref }}
+          PATTERN: ${{ inputs.allowed-branch-pattern }}
         run: |
-          echo "Branch name ${{ github.head_ref }} does not match required pattern: ${{ inputs.allowed-branch-pattern }}"
+          echo "Branch name $BRANCH does not match required pattern: $PATTERN"
           exit 1
 
       - name: Fail if target branch invalid
         if: ${{ steps.validate-target.outputs.valid == 'false' }}
+        env:
+          TARGET: ${{ github.base_ref }}
+          ALLOWED: ${{ inputs.allowed-target-branches }}
         run: |
-          echo "Target branch ${{ github.base_ref }} is not in allowed list: ${{ inputs.allowed-target-branches }}"
+          echo "Target branch $TARGET is not in allowed list: $ALLOWED"
           exit 1
 
       - name: Fail if no conventional commits
@@ -242,15 +259,17 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch base branch and tags
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
         run: |
-          BASE_BRANCH="${{ github.base_ref }}"
           echo "Base branch: $BASE_BRANCH"
           git fetch origin "$BASE_BRANCH" --tags
 
       - name: Get latest tag from base branch
         id: current
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
         run: |
-          BASE_BRANCH="${{ github.base_ref }}"
           LATEST_TAG=$(git describe --tags --abbrev=0 "origin/$BASE_BRANCH" 2>/dev/null || echo "0.0.0")
           VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -288,6 +307,8 @@ jobs:
 
       - name: Commit and push version bump
         if: steps.check.outputs.changed == 'true' && steps.last_commit.outputs.already_bumped == 'false'
+        env:
+          BRANCH: ${{ github.head_ref }}
         run: |
           FILE="${{ steps.bump.outputs.version-file }}"
           NEW_VERSION="${{ steps.bump.outputs.new-version }}"
@@ -295,4 +316,4 @@ jobs:
 
           git add "$FILE"
           git commit -m "chore: bump version to $NEW_VERSION ($TYPE)"
-          git push origin ${{ github.head_ref }}
+          git push origin "$BRANCH"
