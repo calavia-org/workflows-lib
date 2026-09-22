@@ -7,7 +7,7 @@ on:
         description: 'Runner label'
         type: string
         required: false
-        default: 'ubuntu-latest'
+        default: 'ubuntu-24.04'
       validate-action:
         description: 'Validate action.yml structure (set false for workflow-only repos)'
         type: boolean

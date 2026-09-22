@@ -137,14 +137,14 @@ runs:
 
     - name: Setup Python
       if: steps.setup.outputs.python-version != ''
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
         cache: ${{ inputs.cache-enabled == 'true' && 'pip' || 'none' }}
 
     - name: Setup Node.js
       if: steps.setup.outputs.node-version != ''
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
         cache: ${{ inputs.cache-enabled == 'true' && 'npm' || 'none' }}
