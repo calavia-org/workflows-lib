@@ -50,12 +50,12 @@ runs:
   using: composite
   steps:
     - name: Setup environment
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       if: inputs.technology == 'python' || inputs.technology == 'ansible'
       with:
         python-version: ${{ inputs.python-version }}
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       if: inputs.technology == 'nodejs'
       with:
         node-version: ${{ inputs.node-version }}

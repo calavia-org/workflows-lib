@@ -92,7 +92,7 @@ on:
         description: 'Runner label'
         type: string
         required: false
-        default: 'ubuntu-latest'
+        default: 'ubuntu-24.04'
       timeout-minutes:
         description: 'Global timeout'
         type: number
@@ -234,7 +234,7 @@ jobs:
       technologies: ${{ steps.detect.outputs.technologies }}
       primary: ${{ steps.detect.outputs.primary }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/detect-technology@v0
         id: detect
         with:
@@ -247,7 +247,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-pre-commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/setup-pre-commit@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
@@ -262,7 +262,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-lint && always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run lint
         shell: bash
         run: |
@@ -332,7 +332,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-build && always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -405,7 +405,7 @@ jobs:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run tests
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -436,7 +436,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-package && always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run package
         shell: bash
         run: |
@@ -497,7 +497,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-publish && always() && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run publish
         shell: bash
         run: |
@@ -556,7 +556,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.report-enabled && always() }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Publish reports
         uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
         with:
