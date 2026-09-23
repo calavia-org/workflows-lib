@@ -1,0 +1,63 @@
+name: Auto-Merge Dependabot PRs (security alerts only)
+
+on:
+  workflow_call:
+    inputs:
+      merge-method:
+        description: "Merge method for auto-merged PRs (squash, merge, rebase)"
+        type: string
+        required: false
+        default: "squash"
+    secrets:
+      github-token:
+        description: "GitHub token with pull-requests: write permission. Use GITHUB_TOKEN from a pull_request_target trigger."
+        required: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-Merge Security PR
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          alert-lookup: true
+          github-token: ${{ secrets.github-token }}
+
+      - name: Log PR classification
+        env:
+          GHSA_ID: ${{ steps.metadata.outputs.ghsa-id }}
+          ALERT_STATE: ${{ steps.metadata.outputs.alert-state }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY: ${{ steps.metadata.outputs.dependency-names }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+        run: |
+          echo "Dependency: $DEPENDENCY ($ECOSYSTEM)"
+          echo "Update type: $UPDATE_TYPE"
+          echo "GHSA ID: ${GHSA_ID:-<none>}"
+          echo "Alert state: ${ALERT_STATE:-<none>}"
+
+      - name: Enable auto-merge (security alert)
+        if: ${{ steps.metadata.outputs.ghsa-id != '' && steps.metadata.outputs.alert-state == 'OPEN' }}
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.github-token }}
+        run: |
+          echo "🔒 Security PR (${{ steps.metadata.outputs.ghsa-id }}, CVSS ${{ steps.metadata.outputs.cvss }}) — enabling auto-merge"
+          gh pr merge --auto --${{ inputs.merge-method }} "$PR_URL"
+
+      - name: Skip (not a security alert)
+        if: ${{ steps.metadata.outputs.ghsa-id == '' }}
+        run: |
+          echo "⏭️ No security alert associated with this PR — leaving for human review"
+          echo "Only dependabot PRs linked to an open GHSA advisory are auto-merged."
+
+      - name: Skip (alert already resolved/rejected)
+        if: ${{ steps.metadata.outputs.ghsa-id != '' && steps.metadata.outputs.alert-state != 'OPEN' }}
+        run: |
+          echo "⏭️ PR associated with GHSA ${{ steps.metadata.outputs.ghsa-id }} but alert state is '${{ steps.metadata.outputs.alert-state }}'"
+          echo "Only OPEN alerts are auto-merged."
