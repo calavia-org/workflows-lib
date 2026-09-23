@@ -162,9 +162,11 @@ runs:
 
     - name: Setup Rust
       if: steps.setup.outputs.rust-toolchain != ''
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ inputs.rust-toolchain }}
+      shell: bash
+      run: |
+        rustup toolchain install ${{ inputs.rust-toolchain }} --profile minimal
+        rustup default ${{ inputs.rust-toolchain }}
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
     - name: Setup Java
       if: steps.setup.outputs.java-version != ''
