@@ -68,6 +68,11 @@ on:
         type: string
         required: false
         default: ''
+      integration-test-command:
+        description: 'Override integration test command'
+        type: string
+        required: false
+        default: ''
       lint-command:
         description: 'Override lint command'
         type: string
@@ -414,6 +419,7 @@ jobs:
           run-integration-tests: ${{ inputs.run-integration-tests }}
           run-e2e-tests: ${{ inputs.run-e2e-tests }}
           test-command: ${{ inputs.test-command }}
+          integration-test-command: ${{ inputs.integration-test-command }}
           python-version: ${{ inputs.python-version }}
           node-version: ${{ inputs.node-version }}
           go-version: ${{ inputs.go-version }}
