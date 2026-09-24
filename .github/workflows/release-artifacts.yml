@@ -183,6 +183,26 @@ on:
         type: string
         required: false
         default: 'execution-environment.yml'
+      run-tests:
+        description: 'Run tests before building artifacts'
+        type: boolean
+        required: false
+        default: false
+      test-command:
+        description: 'Test command to run'
+        type: string
+        required: false
+        default: ''
+      integration-test-command:
+        description: 'Integration test command to run'
+        type: string
+        required: false
+        default: ''
+      tox-ini:
+        description: 'Path to tox.ini file'
+        type: string
+        required: false
+        default: 'tox.ini'
 
     secrets:
       github-token:
@@ -237,12 +257,39 @@ jobs:
         with:
           artifacts: ${{ inputs.artifacts }}
 
-  build-binary:
-    name: Build Binary
+  test:
+    name: Test
     needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'binary') }}
+    if: ${{ inputs.run-tests == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate test commands
+        if: ${{ inputs.test-command == '' && inputs.integration-test-command == '' }}
+        shell: bash
+        run: |
+          echo "::error::run-tests is true but neither test-command nor integration-test-command is set"
+          exit 1
+      - uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        with:
+          technology: ${{ needs.detect.outputs.technology || inputs.technology }}
+          test-command: ${{ inputs.test-command }}
+          integration-test-command: ${{ inputs.integration-test-command }}
+          tox-ini: ${{ inputs.tox-ini }}
+          python-version: ${{ inputs.python-version }}
+          coverage-report: false
+          test-report-format: junit
+          cache-enabled: true
+          run-unit-tests: ${{ inputs.test-command != '' }}
+          run-integration-tests: ${{ inputs.integration-test-command != '' }}
+
+  build-binary:
+    name: Build Binary
+    needs: [detect, test]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'binary') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     outputs:
       artifact-path: ${{ steps.build.outputs.artifact-path }}
       artifact-name: ${{ steps.build.outputs.artifact-name }}
@@ -263,10 +310,10 @@ jobs:
 
   build-docker:
     name: Build Docker
-    needs: [detect, build-binary]
+    needs: [detect, build-binary, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'docker') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'docker') && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     outputs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
@@ -281,10 +328,10 @@ jobs:
 
   build-ee:
     name: Build Execution Environment
-    needs: [detect, build-binary]
+    needs: [detect, build-binary, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'execution-environment') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'execution-environment') && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     outputs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
@@ -300,10 +347,10 @@ jobs:
 
   build-helm:
     name: Build Helm
-    needs: [detect, build-docker, build-ee]
+    needs: [detect, build-docker, build-ee, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     outputs:
       chart-path: ${{ steps.build.outputs.chart-path }}
       chart-name: ${{ steps.build.outputs.chart-name }}
@@ -320,10 +367,10 @@ jobs:
 
   sign-binary:
     name: Sign Binary
-    needs: [detect, build-binary]
+    needs: [detect, build-binary, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/sign-binary@v0
@@ -334,10 +381,10 @@ jobs:
 
   sign-docker:
     name: Sign Container
-    needs: [detect, build-docker, build-ee]
+    needs: [detect, build-docker, build-ee, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/sign-docker@v0
@@ -347,10 +394,10 @@ jobs:
 
   sign-helm:
     name: Sign Helm
-    needs: [detect, build-helm]
+    needs: [detect, build-helm, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/sign-helm@v0
@@ -361,10 +408,10 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
-    needs: [detect, build-binary, build-docker, build-ee, build-helm, sign-binary, sign-docker, sign-helm]
+    needs: [detect, build-binary, build-docker, build-ee, build-helm, sign-binary, sign-docker, sign-helm, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     outputs:
       release-url: ${{ steps.publish.outputs.release-url }}
       release-id: ${{ steps.publish.outputs.release-id }}
@@ -387,10 +434,10 @@ jobs:
 
   publish-ghcr:
     name: Publish to GHCR
-    needs: [detect, build-docker, build-ee, sign-docker]
+    needs: [detect, build-docker, build-ee, sign-docker, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') }}
+    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: calavia-org/workflows-lib/.github/actions/publish-ghcr@v0
         with:
@@ -400,10 +447,10 @@ jobs:
 
   publish-package:
     name: Publish Package
-    needs: [detect, build-binary, sign-binary]
+    needs: [detect, build-binary, sign-binary, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
+    if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/publish-package@v0
@@ -416,10 +463,10 @@ jobs:
 
   publish-helm:
     name: Publish Helm
-    needs: [detect, build-helm, sign-helm]
+    needs: [detect, build-helm, sign-helm, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') }}
+    if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/publish-helm@v0
@@ -446,7 +493,7 @@ jobs:
     needs: [detect, publish-github-release, publish-ghcr, publish-package, publish-helm]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 5
-    if: ${{ inputs.notify-on-release && always() && needs.detect.result == 'success' }}
+    if: ${{ inputs.notify-on-release && always() && needs.detect.result == 'success' && (needs.publish-github-release.result == 'success' || needs.publish-github-release.result == 'skipped') && (needs.publish-ghcr.result == 'success' || needs.publish-ghcr.result == 'skipped') && (needs.publish-package.result == 'success' || needs.publish-package.result == 'skipped') && (needs.publish-helm.result == 'success' || needs.publish-helm.result == 'skipped') }}
     steps:
       - name: Slack notification
         if: inputs.slack-webhook != ''
