@@ -262,7 +262,7 @@ jobs:
     needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-tests == 'true' }}
+    if: ${{ inputs.run-tests }}
     steps:
       - uses: actions/checkout@v6
       - name: Validate test commands
