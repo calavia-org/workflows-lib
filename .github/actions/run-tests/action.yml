@@ -418,24 +418,37 @@ runs:
       run: |
         echo "Collecting test results..."
         mkdir -p test-results
-        
-        # Find and collect test result files
-        find . -name "test-results*.xml" -o -name "test-results*.json" -o -name "junit*.xml" | while read file; do
-          cp "$file" test-results/
-        done
-        
-        # Find and collect coverage reports
-        find . -name "coverage*.xml" -o -name "coverage*.json" -o -name "coverage*.html" | while read file; do
-          cp "$file" test-results/
-        done
-        
+
+        collect() {
+          local pattern="$1"
+          while IFS= read -r file; do
+            # Skip files already living in the destination directory
+            [ -z "$file" ] && continue
+            local dest="test-results/$(basename "$file")"
+            if [ "$file" = "./$dest" ]; then
+              echo "  already in place: $dest"
+              continue
+            fi
+            cp "$file" "$dest"
+            echo "  collected: $file -> $dest"
+          done < <(find . -path ./.git -prune -o -type f -name "$pattern" -print)
+        }
+
+        collect "test-results*.xml"
+        collect "test-results*.json"
+        collect "junit*.xml"
+        collect "coverage*.xml"
+        collect "coverage*.json"
+        collect "coverage*.html"
+
         echo "Test results collected"
         ls -la test-results/
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-${{ inputs.technology }}
         path: test-results/
         retention-days: 7
+        if-no-files-found: ignore

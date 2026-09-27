@@ -71,7 +71,7 @@ runs:
         docker save "$FULL_TAG" -o docker-image.tar
         echo "✅ Saved EE image to docker-image.tar"
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: docker-image
         path: docker-image.tar

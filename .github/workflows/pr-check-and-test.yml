@@ -262,24 +262,58 @@ jobs:
 
   lint:
     name: Lint
-    needs: [detect, pre-commit]
+    needs: [detect]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-lint && always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
+    if: ${{ inputs.run-lint }}
     steps:
       - uses: actions/checkout@v6
-      - name: Run lint
+      - name: Setup Python
+        if: ${{ inputs.technology == 'python' || inputs.technology == 'ansible' || inputs.technology == 'auto' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install Python linters
+        if: ${{ inputs.technology == 'python' || inputs.technology == 'ansible' || inputs.technology == 'auto' }}
         shell: bash
         run: |
-          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
-          
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check ruff
+      - name: Setup Node.js
+        if: ${{ inputs.technology == 'nodejs' }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Setup Go
+        if: ${{ inputs.technology == 'go' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Setup Rust
+        if: ${{ inputs.technology == 'rust' }}
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Java
+        if: ${{ inputs.technology == 'java' }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: ${{ inputs.java-distribution }}
+          java-version: ${{ inputs.java-version }}
+      - name: Run lint
+        env:
+          TECH: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          LINT_COMMAND: ${{ inputs.lint-command }}
+          PYTHON_VERSION: ${{ inputs.python-version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
           # Use custom command if provided
-          if [ -n "${{ inputs.lint-command }}" ]; then
+          if [ -n "$LINT_COMMAND" ]; then
             echo "Running custom lint command..."
-            ${{ inputs.lint-command }}
+            eval "$LINT_COMMAND"
             exit 0
           fi
-          
+
           # Technology-specific lint
           case "$TECH" in
             python|ansible)
@@ -288,7 +322,10 @@ jobs:
               elif command -v flake8 &> /dev/null; then
                 flake8
               elif command -v pylint &> /dev/null; then
-                pylint **/*.py
+                pylint .
+              else
+                echo "::error::No Python linter available (expected ruff, flake8 or pylint)"
+                exit 1
               fi
               ;;
             nodejs)
@@ -296,7 +333,11 @@ jobs:
                 if grep -q '"lint"' package.json; then
                   npm run lint
                 elif command -v eslint &> /dev/null; then
-                  eslint . --ext .js,.jsx,.ts,.tsx
+                  npm install --no-save --no-audit --no-fund eslint@8
+                  npx eslint . --ext .js,.jsx,.ts,.tsx
+                else
+                  echo "::error::No Node.js linter available (expected a 'lint' script or eslint)"
+                  exit 1
                 fi
               fi
               ;;
@@ -332,10 +373,10 @@ jobs:
 
   build:
     name: Build
-    needs: [detect, lint]
+    needs: [detect, lint, pre-commit]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-build && always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    if: ${{ inputs.run-build && always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - name: Setup environment
