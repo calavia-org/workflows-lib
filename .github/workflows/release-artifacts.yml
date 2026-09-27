@@ -437,7 +437,7 @@ jobs:
     needs: [detect, build-docker, build-ee, sign-docker, test]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-ee.result == 'success') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
       - uses: calavia-org/workflows-lib/.github/actions/publish-ghcr@v0
         with:
