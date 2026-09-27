@@ -163,19 +163,18 @@ runs:
     - name: Comment on PR
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && inputs.report-enabled == 'true'
       uses: actions/github-script@v7
+      env:
+        COVERAGE_STATUS: ${{ inputs.publish-coverage == 'true' && 'Available' || 'Not published' }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const fs = require('fs');
-          const path = require('path');
-          
           // Generate a simple comment
           const summary = `# ${{ inputs.summary-title }}\n\n` +
             `**Technology:** ${{ inputs.technology }}\n\n` +
             `✅ CI workflow completed. Check the [Actions run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed results.\n\n` +
             `**Artifacts:**\n` +
             `- Test results: Available\n` +
-            `- Coverage report: ${{ inputs.publish-coverage == 'true' ? 'Available' : 'Not published' }}\n` +
+            `- Coverage report: ${process.env.COVERAGE_STATUS}\n` +
             `- Retention: ${{ inputs.artifact-retention-days }} days\n`;
           
           // Post comment on PR
