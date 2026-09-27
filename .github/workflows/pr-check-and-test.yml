@@ -289,9 +289,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ inputs.go-version }}
-      - name: Setup Rust
-        if: ${{ inputs.technology == 'rust' }}
-        uses: dtolnay/rust-toolchain@stable
+      # No Rust setup: ubuntu-24.04 ships rustc/cargo/rustfmt, and no
+      # allow-listed action can install a toolchain — adding one breaks all consumers.
       - name: Setup Java
         if: ${{ inputs.technology == 'java' }}
         uses: actions/setup-java@v5
