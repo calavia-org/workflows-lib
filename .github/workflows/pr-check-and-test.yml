@@ -63,6 +63,11 @@ on:
         type: string
         required: false
         default: ''
+      pre-commit-fail-on-missing:
+        description: 'Fail the pre-commit job if no pre-commit config is found. Kept separate from fail-on-missing, which governs technology detection, not config presence.'
+        type: boolean
+        required: false
+        default: true
       test-command:
         description: 'Override test command'
         type: string
@@ -262,7 +267,7 @@ jobs:
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           custom-config: ${{ inputs.custom-pre-commit-config }}
-          fail-on-missing: ${{ inputs.fail-on-missing }}
+          fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
           run-all-files: 'true'
 
   lint:
