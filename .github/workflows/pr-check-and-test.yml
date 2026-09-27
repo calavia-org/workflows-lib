@@ -123,6 +123,11 @@ on:
         type: string
         required: false
         default: '3.12'
+      python-linter-version:
+        description: "Pinned ruff version. Set this to the ruff-pre-commit 'rev' in the repo's .pre-commit-config.yaml, otherwise new default rules in newer ruff releases will fail the lint job on code the repo's own pre-commit accepts."
+        type: string
+        required: false
+        default: 'latest'
       node-version:
         description: 'Node.js version'
         type: string
@@ -275,10 +280,16 @@ jobs:
           python-version: ${{ inputs.python-version }}
       - name: Install Python linters
         if: ${{ inputs.technology == 'python' || inputs.technology == 'ansible' || inputs.technology == 'auto' }}
+        env:
+          LINTER_VERSION: ${{ inputs.python-linter-version }}
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --quiet --disable-pip-version-check ruff
+          if [ -n "$LINTER_VERSION" ] && [ "$LINTER_VERSION" != "latest" ]; then
+            python -m pip install --quiet --disable-pip-version-check "ruff==$LINTER_VERSION"
+          else
+            python -m pip install --quiet --disable-pip-version-check ruff
+          fi
       - name: Setup Node.js
         if: ${{ inputs.technology == 'nodejs' }}
         uses: actions/setup-node@v5
