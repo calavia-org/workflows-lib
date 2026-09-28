@@ -225,6 +225,14 @@ on:
         description: 'Slack webhook'
         required: false
 
+# Baseline for every job that checks out the repo or runs code from the PR
+# (tox, pre-commit hooks, build/package scripts). A caller may grant a broader
+# token, so without this those jobs would inherit the caller's grant and leave a
+# writable token sitting in the workspace while PR code runs. `report` and
+# `pre-release` widen this for the one permission each actually needs.
+permissions:
+  contents: read
+
 jobs:
   detect:
     name: Detect Technology
@@ -235,6 +243,8 @@ jobs:
       primary: ${{ steps.detect.outputs.primary }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: calavia-org/workflows-lib/.github/actions/detect-technology@v0
         id: detect
         with:
@@ -248,6 +258,8 @@ jobs:
     if: ${{ inputs.run-pre-commit }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: calavia-org/workflows-lib/.github/actions/setup-pre-commit@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
@@ -268,6 +280,8 @@ jobs:
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Run unit tests
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -299,6 +313,8 @@ jobs:
     if: ${{ inputs.run-build }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Setup environment
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -398,6 +414,8 @@ jobs:
     if: ${{ inputs.run-package }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Run package
         shell: bash
         run: |
@@ -499,6 +517,8 @@ jobs:
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Run integration tests
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -537,8 +557,14 @@ jobs:
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.report.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    # Creating the GitHub Release is the only thing in this workflow that needs
+    # write access, which is why it is scoped to this job alone.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Detect pre-release artifacts
         id: artifacts
         uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
@@ -609,8 +635,16 @@ jobs:
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
+    # Publishing test results creates checks and the PR comment, neither of
+    # which the `contents: read` baseline allows.
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Publish reports
         uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
         with:
