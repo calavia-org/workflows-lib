@@ -16,6 +16,10 @@ inputs:
     description: 'Create as draft'
     required: false
     default: 'false'
+  prerelease:
+    description: 'Mark the release as a pre-release'
+    required: false
+    default: 'false'
   artifacts:
     description: 'Comma-separated paths to artifacts'
     required: false
@@ -39,12 +43,13 @@ runs:
   steps:
     - name: Create release
       id: release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: v${{ inputs.version }}
         name: ${{ inputs.release-name || format('Release v{0}', inputs.version) }}
         body: ${{ inputs.release-notes }}
         draft: ${{ inputs.draft }}
+        prerelease: ${{ inputs.prerelease }}
         generate_release_notes: ${{ inputs.generate-notes }}
         files: ${{ inputs.artifacts }}
         token: ${{ inputs.github-token }}
