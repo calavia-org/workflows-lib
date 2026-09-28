@@ -594,7 +594,10 @@ jobs:
   # report-enabled would block every PR org-wide.
   report:
     name: Test
-    needs: [unit, integration]
+    # `package` is needed so that a failed package cannot leave this required
+    # check green: a failed package skips `integration`, and a skipped
+    # integration is otherwise indistinguishable from an intentional one.
+    needs: [unit, integration, package]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -623,9 +626,11 @@ jobs:
         env:
           UNIT_RESULT: ${{ needs.unit.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
           echo "Unit: $UNIT_RESULT"
           echo "Integration: $INTEGRATION_RESULT"
+          echo "Package: $PACKAGE_RESULT"
           FAILED=0
           if [ "$UNIT_RESULT" != "success" ]; then
             echo "❌ Unit tests did not pass (result: $UNIT_RESULT)."
@@ -635,6 +640,13 @@ jobs:
           # started and did not pass is not.
           if [ "$INTEGRATION_RESULT" != "success" ] && [ "$INTEGRATION_RESULT" != "skipped" ]; then
             echo "❌ Integration tests did not pass (result: $INTEGRATION_RESULT)."
+            FAILED=1
+          fi
+          # A failed package skips integration, so the skipped result above
+          # cannot be told apart from an intentional skip. Without this the
+          # required `Test` check would go green while `Package` is red.
+          if [ "$PACKAGE_RESULT" != "success" ] && [ "$PACKAGE_RESULT" != "skipped" ]; then
+            echo "❌ Packaging did not pass (result: $PACKAGE_RESULT)."
             FAILED=1
           fi
           if [ "$FAILED" -ne 0 ]; then
