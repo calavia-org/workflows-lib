@@ -43,7 +43,7 @@ runs:
   steps:
     - name: Create release
       id: release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: v${{ inputs.version }}
         name: ${{ inputs.release-name || format('Release v{0}', inputs.version) }}

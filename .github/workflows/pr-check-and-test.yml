@@ -375,7 +375,7 @@ jobs:
           esac
       - name: Upload build artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-output
           path: |
@@ -467,7 +467,7 @@ jobs:
             esac
       - name: Upload package artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: package-output
           path: |
@@ -525,10 +525,10 @@ jobs:
   # pre-release while the real release still builds it.
   pre-release:
     name: Pre-Release
-    needs: [detect, package, integration]
+    needs: [unit, package, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.unit.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - name: Detect pre-release artifacts
@@ -537,7 +537,7 @@ jobs:
         with:
           pre-release-artifacts: ${{ inputs.pre-release-artifacts }}
       - name: Download build and package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: '*-output'
           path: pre-release-artifacts
@@ -594,7 +594,7 @@ jobs:
   # report-enabled would block every PR org-wide.
   report:
     name: Test
-    needs: [detect, unit, integration]
+    needs: [unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -603,7 +603,7 @@ jobs:
       - name: Publish reports
         uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
         with:
-          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          technology: ${{ inputs.technology }}
           report-enabled: ${{ inputs.report-enabled }}
           coverage-format: ${{ inputs.coverage-format }}
           coverage-tool: ${{ inputs.coverage-tool }}
