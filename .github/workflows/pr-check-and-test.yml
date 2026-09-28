@@ -533,7 +533,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Detect pre-release artifacts
         id: artifacts
-        uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@feat/split-test-add-prerelease
+        uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
         with:
           pre-release-artifacts: ${{ inputs.pre-release-artifacts }}
       - name: Download build and package artifacts
@@ -579,7 +579,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Create pre-release
-        uses: calavia-org/workflows-lib/.github/actions/publish-github-release@feat/split-test-add-prerelease
+        uses: calavia-org/workflows-lib/.github/actions/publish-github-release@v0
         with:
           version: 0.0.0-pr.${{ github.run_number }}
           release-name: "Pre-release ${{ github.ref_name }} (build ${{ github.run_number }})"
