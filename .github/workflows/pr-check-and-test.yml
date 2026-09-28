@@ -548,10 +548,16 @@ jobs:
         run: |
           SELECTED="${{ steps.artifacts.outputs.pre-release-artifacts }}"
           echo "Resolved pre-release artifacts: $SELECTED"
-          if [ -z "$SELECTED" ] || [ "$SELECTED" = "auto" ]; then
-            echo "⚠️ No pre-release artifacts resolved, skipping release creation"
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ -z "$SELECTED" ]; then
+            echo "❌ detect-artifacts produced no pre-release-artifacts output."
+            echo "prerelease-enabled is true, so a pre-release is expected and its absence"
+            echo "is a failure, not something to skip. Check that workflows-lib is released"
+            echo "so that @v0 includes the pre-release-artifacts output."
+            exit 1
+          fi
+          if [ "$SELECTED" = "auto" ]; then
+            echo "❌ detect-artifacts left pre-release-artifacts unresolved (auto)."
+            exit 1
           fi
           if [ "$SELECTED" != "binary" ]; then
             echo "❌ '$SELECTED' is not produced by this workflow."
@@ -571,10 +577,8 @@ jobs:
             echo "paths<<EOF"
             echo "$FOUND"
             echo "EOF"
-            echo "enabled=true"
           } >> "$GITHUB_OUTPUT"
       - name: Create pre-release
-        if: steps.select.outputs.enabled == 'true'
         uses: calavia-org/workflows-lib/.github/actions/publish-github-release@v0
         with:
           version: 0.0.0-pr.${{ github.run_number }}
