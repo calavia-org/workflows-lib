@@ -5,10 +5,17 @@ inputs:
     description: 'Explicit comma-separated list of artifacts (binary,docker,execution-environment,helm). Use "auto" to detect from repo files.'
     required: false
     default: 'auto'
+  pre-release-artifacts:
+    description: 'Explicit comma-separated list of artifacts to attach to a pre-release, or "auto" to resolve per technology. Ansible resolves to the collection tarball only, excluding the execution environment.'
+    required: false
+    default: 'auto'
 outputs:
   artifacts:
     description: 'Comma-separated list of artifacts to build (binary,docker,execution-environment,helm)'
     value: ${{ steps.detect.outputs.artifacts }}
+  pre-release-artifacts:
+    description: 'Comma-separated list of artifacts to attach to a pre-release (subset of artifacts)'
+    value: ${{ steps.detect.outputs.pre-release-artifacts }}
   binary-type:
     description: 'Type of binary artifact (java,nodejs,go,python,rust,ansible,generic)'
     value: ${{ steps.detect.outputs.binary-type }}
@@ -21,7 +28,21 @@ runs:
       run: |
         ARTIFACTS="${{ inputs.artifacts }}"
         BINARY_TYPE=""
-        
+
+        # Ansible pre-releases ship the collection tarball only, never the execution environment.
+        resolve_pre_release() {
+          local pre="${{ inputs.pre-release-artifacts }}"
+          if [ "$pre" = "auto" ] || [ -z "$pre" ]; then
+            if [ "$BINARY_TYPE" = "ansible" ]; then
+              pre="binary"
+            else
+              pre="$ARTIFACTS"
+            fi
+          fi
+          echo "pre-release-artifacts=$pre" >> "$GITHUB_OUTPUT"
+          echo "✅ Pre-release artifacts: $pre"
+        }
+
         # If explicit artifacts provided (not auto), use them directly
         if [ "$ARTIFACTS" != "auto" ] && [ -n "$ARTIFACTS" ]; then
           echo "artifacts=$ARTIFACTS" >> "$GITHUB_OUTPUT"
@@ -48,6 +69,8 @@ runs:
             echo "binary-type=" >> "$GITHUB_OUTPUT"
             echo "✅ Artifacts from input: $ARTIFACTS"
           fi
+
+          resolve_pre_release
           exit 0
         fi
         
@@ -110,3 +133,5 @@ runs:
           echo "artifacts=" >> "$GITHUB_OUTPUT"
           echo "binary-type=" >> "$GITHUB_OUTPUT"
         fi
+
+        resolve_pre_release

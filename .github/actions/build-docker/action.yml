@@ -36,7 +36,7 @@ runs:
   steps:
     - name: Download binary artifact
       if: inputs.binary-artifact != ''
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: ${{ inputs.binary-artifact }}
         path: ./artifact
@@ -78,7 +78,7 @@ runs:
         docker save "$FULL_TAG" -o docker-image.tar
         echo "✅ Saved image to docker-image.tar"
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: docker-image
         path: docker-image.tar

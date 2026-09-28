@@ -47,7 +47,7 @@ on:
         description: 'Runner label'
         type: string
         required: false
-        default: 'ubuntu-latest'
+        default: 'ubuntu-24.04'
     secrets:
       github-token:
         description: 'GitHub token for creating releases and tags'

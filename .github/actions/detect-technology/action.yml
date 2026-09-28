@@ -1,5 +1,10 @@
 name: 'Detect Technology'
 description: 'Detects the technology stack of the repository based on file indicators'
+inputs:
+  fail-on-missing:
+    description: 'Fail the step when no technology is detected'
+    required: false
+    default: 'false'
 outputs:
   technologies:
     description: 'Comma-separated list of detected technologies'
@@ -12,6 +17,8 @@ runs:
   steps:
     - name: Detect technology
       id: detect
+      env:
+        FAIL_ON_MISSING: ${{ inputs.fail-on-missing }}
       shell: bash
       run: |
         TECHS=""
@@ -84,7 +91,7 @@ runs:
         
         if [ -z "$TECHS" ]; then
           echo "No recognized technology detected"
-          if [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+          if [ "$FAIL_ON_MISSING" = "true" ]; then
             exit 1
           fi
           PRIMARY="generic"

@@ -35,7 +35,7 @@ on:
 jobs:
   check-pr:
     name: Check PR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       bump_type: ${{ steps.conventional.outputs.bump_type }}
       has_conventional: ${{ steps.conventional.outputs.has_conventional }}
@@ -242,7 +242,7 @@ jobs:
       needs.check-pr.outputs.bump_type != '' &&
       needs.check-pr.outputs.bump_type != 'doc' &&
       needs.check-pr.outputs.should_bump == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

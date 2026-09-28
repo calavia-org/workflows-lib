@@ -13,18 +13,13 @@ on:
         type: boolean
         required: false
         default: true
-      run-lint:
-        description: 'Run static analysis'
-        type: boolean
-        required: false
-        default: true
       run-build:
         description: 'Run build step'
         type: boolean
         required: false
         default: true
       run-tests:
-        description: 'Run all tests'
+        description: 'Deprecated: no-op. Unit tests run in the Unit Test job (run-unit-tests) and integration tests in the Integration Test job (run-integration-tests). Kept only so existing callers on the floating v0 ref do not fail with an unexpected input.'
         type: boolean
         required: false
         default: true
@@ -48,11 +43,16 @@ on:
         type: boolean
         required: false
         default: false
-      run-publish:
-        description: 'Run publish step'
+      prerelease-enabled:
+        description: 'Create a GitHub pre-release from the build/package artifacts. Only fires when the PR targets a release/* branch, so ordinary PRs against main never create a release.'
         type: boolean
         required: false
         default: false
+      pre-release-artifacts:
+        description: "Comma-separated artifacts to attach to the pre-release, or 'auto' to resolve them per technology. For Ansible this resolves to the collection tarball only, deliberately excluding the execution environment."
+        type: string
+        required: false
+        default: 'auto'
       fail-on-missing:
         description: 'Fail if config file missing'
         type: boolean
@@ -63,13 +63,18 @@ on:
         type: string
         required: false
         default: ''
+      pre-commit-fail-on-missing:
+        description: 'Fail the pre-commit job if no pre-commit config is found. Kept separate from fail-on-missing, which governs technology detection, not config presence.'
+        type: boolean
+        required: false
+        default: true
       test-command:
         description: 'Override test command'
         type: string
         required: false
         default: ''
-      lint-command:
-        description: 'Override lint command'
+      integration-test-command:
+        description: 'Override integration test command'
         type: string
         required: false
         default: ''
@@ -83,16 +88,11 @@ on:
         type: string
         required: false
         default: ''
-      publish-command:
-        description: 'Override publish command'
-        type: string
-        required: false
-        default: ''
       runner-label:
         description: 'Runner label'
         type: string
         required: false
-        default: 'ubuntu-latest'
+        default: 'ubuntu-24.04'
       timeout-minutes:
         description: 'Global timeout'
         type: number
@@ -234,7 +234,7 @@ jobs:
       technologies: ${{ steps.detect.outputs.technologies }}
       primary: ${{ steps.detect.outputs.primary }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/detect-technology@v0
         id: detect
         with:
@@ -247,92 +247,58 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-pre-commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: calavia-org/workflows-lib/.github/actions/setup-pre-commit@v0
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           custom-config: ${{ inputs.custom-pre-commit-config }}
-          fail-on-missing: ${{ inputs.fail-on-missing }}
+          fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
           run-all-files: 'true'
 
-  lint:
-    name: Lint
+  # Unit tests are the mandatory gate: they must pass before anything is built,
+  # packaged or integrated. Always runs, so a skipped unit job still reports.
+  unit:
+    name: Unit Test
     needs: [detect, pre-commit]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-lint && always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
+    if: ${{ always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
+    strategy:
+      fail-fast: ${{ inputs.fail-fast }}
+      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Run lint
-        shell: bash
-        run: |
-          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
-          
-          # Use custom command if provided
-          if [ -n "${{ inputs.lint-command }}" ]; then
-            echo "Running custom lint command..."
-            ${{ inputs.lint-command }}
-            exit 0
-          fi
-          
-          # Technology-specific lint
-          case "$TECH" in
-            python|ansible)
-              if command -v ruff &> /dev/null; then
-                ruff check .
-              elif command -v flake8 &> /dev/null; then
-                flake8
-              elif command -v pylint &> /dev/null; then
-                pylint **/*.py
-              fi
-              ;;
-            nodejs)
-              if [ -f "package.json" ]; then
-                if grep -q '"lint"' package.json; then
-                  npm run lint
-                elif command -v eslint &> /dev/null; then
-                  eslint . --ext .js,.jsx,.ts,.tsx
-                fi
-              fi
-              ;;
-            go)
-              if command -v golangci-lint &> /dev/null; then
-                golangci-lint run
-              else
-                go vet ./...
-              fi
-              ;;
-            rust)
-              cargo fmt --check
-              cargo clippy -- -D warnings
-              ;;
-            java)
-              if [ -f "pom.xml" ]; then
-                mvn checkstyle:check
-              elif [ -f "build.gradle" ]; then
-                gradle check
-              fi
-              ;;
-            docker)
-              if command -v hadolint &> /dev/null; then
-                hadolint Dockerfile
-              fi
-              ;;
-            generic)
-              if [ -f "Makefile" ] && grep -q "^lint:" Makefile; then
-                make lint
-              fi
-              ;;
-          esac
+      - uses: actions/checkout@v6
+      - name: Run unit tests
+        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          run-unit-tests: ${{ inputs.run-unit-tests }}
+          run-integration-tests: false
+          run-e2e-tests: false
+          test-command: ${{ inputs.test-command }}
+          python-version: ${{ inputs.python-version }}
+          node-version: ${{ inputs.node-version }}
+          go-version: ${{ inputs.go-version }}
+          rust-toolchain: ${{ inputs.rust-toolchain }}
+          java-version: ${{ inputs.java-version }}
+          java-distribution: ${{ inputs.java-distribution }}
+          cache-enabled: ${{ inputs.cache-enabled }}
+          test-timeout: ${{ inputs.test-timeout }}
+          tox-ini: ${{ inputs.tox-ini }}
+          ansible-collection-path: ${{ inputs.ansible-collection-path }}
+          test-paths: ${{ inputs.test-paths }}
+          extra-args: ${{ inputs.extra-args }}
+          coverage-format: ${{ inputs.coverage-format }}
+          fail-fast: ${{ inputs.fail-fast }}
 
   build:
     name: Build
-    needs: [detect, lint]
+    needs: [detect, unit]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-build && always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    if: ${{ inputs.run-build && always() && (needs.unit.result == 'success' || needs.unit.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup environment
         uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
         with:
@@ -354,13 +320,26 @@ jobs:
           
           # Technology-specific build
           case "$TECH" in
-            python|ansible)
+            python)
               if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
                 poetry build
               elif [ -f "setup.py" ]; then
                 python setup.py build
               elif [ -f "setup.cfg" ]; then
                 python -m build
+              fi
+              ;;
+            ansible)
+              # Collections have no compile step; the galaxy tarball is built in `package`.
+              COLLECTION_PATH="${{ inputs.ansible-collection-path }}"
+              if [ -z "$COLLECTION_PATH" ]; then
+                COLLECTION_PATH="$(dirname "$(find . -name galaxy.yml -not -path '*/node_modules/*' -print -quit)")"
+              fi
+              if [ -f "$COLLECTION_PATH/galaxy.yml" ]; then
+                echo "✅ Collection manifest found at $COLLECTION_PATH/galaxy.yml"
+              else
+                echo "❌ No galaxy.yml found (searched '$COLLECTION_PATH')"
+                exit 1
               fi
               ;;
             nodejs)
@@ -394,49 +373,31 @@ jobs:
               fi
               ;;
           esac
-
-  test:
-    name: Test
-    needs: [detect, build]
-    runs-on: ${{ inputs.runner-label }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-tests && always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
-    strategy:
-      fail-fast: ${{ inputs.fail-fast }}
-      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
-          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
-          run-unit-tests: ${{ inputs.run-unit-tests }}
-          run-integration-tests: ${{ inputs.run-integration-tests }}
-          run-e2e-tests: ${{ inputs.run-e2e-tests }}
-          test-command: ${{ inputs.test-command }}
-          python-version: ${{ inputs.python-version }}
-          node-version: ${{ inputs.node-version }}
-          go-version: ${{ inputs.go-version }}
-          rust-toolchain: ${{ inputs.rust-toolchain }}
-          java-version: ${{ inputs.java-version }}
-          java-distribution: ${{ inputs.java-distribution }}
-          cache-enabled: ${{ inputs.cache-enabled }}
-          test-timeout: ${{ inputs.test-timeout }}
-          tox-ini: ${{ inputs.tox-ini }}
-          ansible-collection-path: ${{ inputs.ansible-collection-path }}
-          test-paths: ${{ inputs.test-paths }}
-          extra-args: ${{ inputs.extra-args }}
-          coverage-format: ${{ inputs.coverage-format }}
-          fail-fast: ${{ inputs.fail-fast }}
+          name: build-output
+          path: |
+            dist/
+            bin/
+            build/
+            target/
+            *.tar
+            *.tar.gz
+            *.jar
+            *.whl
+          retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: ignore
 
   package:
     name: Package
-    needs: [detect, test]
+    needs: [detect, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-package && always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.run-package && always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run package
         shell: bash
         run: |
@@ -449,17 +410,32 @@ jobs:
             exit 0
           fi
           
-          # Technology-specific package
-          case "$TECH" in
-            python|ansible)
-              if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
-                poetry build
-              elif [ -f "setup.py" ]; then
-                python setup.py sdist bdist_wheel
-              elif [ -f "setup.cfg" ]; then
-                python -m build
-              fi
-              ;;
+            # Technology-specific package
+            case "$TECH" in
+              python)
+                if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
+                  poetry build
+                elif [ -f "setup.py" ]; then
+                  python setup.py sdist bdist_wheel
+                elif [ -f "setup.cfg" ]; then
+                  python -m build
+                fi
+                ;;
+              ansible)
+                # Must stay a separate branch: collections have no pyproject.toml/setup.py, so merging it into `python)` silently produces no artifact.
+                COLLECTION_PATH="${{ inputs.ansible-collection-path }}"
+                if [ -z "$COLLECTION_PATH" ]; then
+                  COLLECTION_PATH="$(dirname "$(find . -name galaxy.yml -not -path '*/node_modules/*' -print -quit)")"
+                fi
+                if [ ! -f "$COLLECTION_PATH/galaxy.yml" ]; then
+                  echo "❌ No galaxy.yml found (searched '$COLLECTION_PATH')"
+                  exit 1
+                fi
+                mkdir -p dist
+                ansible-galaxy collection build --output-path dist --force "$COLLECTION_PATH"
+                echo "✅ Built collection artifact:"
+                ls -la dist/
+                ;;
             nodejs)
               if [ -f "package.json" ]; then
                 npm pack
@@ -483,84 +459,151 @@ jobs:
                 docker save ${{ github.repository }}:${{ github.sha }} > ${{ github.repository }}-${{ github.sha }}.tar
               fi
               ;;
-            generic)
-              if [ -f "Makefile" ] && grep -q "^package:" Makefile; then
-                make package
-              fi
-              ;;
-          esac
+              generic)
+                if [ -f "Makefile" ] && grep -q "^package:" Makefile; then
+                  make package
+                fi
+                ;;
+            esac
+      - name: Upload package artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: package-output
+          path: |
+            dist/
+            *.tar
+            *.tar.gz
+            *.tgz
+            *.whl
+            *.jar
+            *.zip
+          retention-days: ${{ inputs.artifact-retention-days }}
+          if-no-files-found: ignore
 
-  publish:
-    name: Publish
+  # Integration tests run last, after the build and package steps, and are the
+  # only part of the chain a consumer may skip. They are the slow, environment
+  # heavy tier (molecule/Docker), so keeping them out of the mandatory unit
+  # gate is what makes that gate fast.
+  integration:
+    name: Integration Test
     needs: [detect, package]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-publish && always() && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ inputs.run-integration-tests && always() && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    strategy:
+      fail-fast: ${{ inputs.fail-fast }}
+      max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Run publish
+      - uses: actions/checkout@v6
+      - name: Run integration tests
+        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        with:
+          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          run-unit-tests: false
+          run-integration-tests: true
+          run-e2e-tests: ${{ inputs.run-e2e-tests }}
+          integration-test-command: ${{ inputs.integration-test-command }}
+          python-version: ${{ inputs.python-version }}
+          node-version: ${{ inputs.node-version }}
+          go-version: ${{ inputs.go-version }}
+          rust-toolchain: ${{ inputs.rust-toolchain }}
+          java-version: ${{ inputs.java-version }}
+          java-distribution: ${{ inputs.java-distribution }}
+          cache-enabled: ${{ inputs.cache-enabled }}
+          test-timeout: ${{ inputs.test-timeout }}
+          tox-ini: ${{ inputs.tox-ini }}
+          ansible-collection-path: ${{ inputs.ansible-collection-path }}
+          test-paths: ${{ inputs.test-paths }}
+          extra-args: ${{ inputs.extra-args }}
+          coverage-format: ${{ inputs.coverage-format }}
+          fail-fast: ${{ inputs.fail-fast }}
+
+  # Pre-releases are only ever cut from a release/* base branch, so ordinary
+  # PRs against main never create a release. The artifact list is resolved per
+  # technology, which is what keeps the Ansible execution environment out of a
+  # pre-release while the real release still builds it.
+  pre-release:
+    name: Pre-Release
+    needs: [unit, package, integration]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.unit.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect pre-release artifacts
+        id: artifacts
+        uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
+        with:
+          pre-release-artifacts: ${{ inputs.pre-release-artifacts }}
+      - name: Download build and package artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: '*-output'
+          path: pre-release-artifacts
+          merge-multiple: true
+      - name: Select artifacts for this technology
+        id: select
         shell: bash
         run: |
-          TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
-          
-          # Use custom command if provided
-          if [ -n "${{ inputs.publish-command }}" ]; then
-            echo "Running custom publish command..."
-            ${{ inputs.publish-command }}
-            exit 0
+          SELECTED="${{ steps.artifacts.outputs.pre-release-artifacts }}"
+          echo "Resolved pre-release artifacts: $SELECTED"
+          if [ -z "$SELECTED" ]; then
+            echo "❌ detect-artifacts produced no pre-release-artifacts output."
+            echo "prerelease-enabled is true, so a pre-release is expected and its absence"
+            echo "is a failure, not something to skip. Check that workflows-lib is released"
+            echo "so that @v0 includes the pre-release-artifacts output."
+            exit 1
           fi
-          
-          # Technology-specific publish
-          case "$TECH" in
-            python|ansible)
-              if [ -f "pyproject.toml" ] && command -v poetry &> /dev/null; then
-                poetry publish
-              elif [ -f "setup.py" ]; then
-                twine upload dist/*
-              fi
-              ;;
-            nodejs)
-              if [ -f "package.json" ]; then
-                npm publish
-              fi
-              ;;
-            go)
-              echo "Go modules published via git tags"
-              ;;
-            rust)
-              cargo publish
-              ;;
-            java)
-              if [ -f "pom.xml" ]; then
-                mvn deploy
-              elif [ -f "build.gradle" ]; then
-                gradle publish
-              fi
-              ;;
-            docker)
-              if [ -f "Dockerfile" ]; then
-                docker push ${{ github.repository }}:${{ github.sha }}
-              fi
-              ;;
-            generic)
-              if [ -f "Makefile" ] && grep -q "^publish:" Makefile; then
-                make publish
-              fi
-              ;;
-          esac
+          if [ "$SELECTED" = "auto" ]; then
+            echo "❌ detect-artifacts left pre-release-artifacts unresolved (auto)."
+            exit 1
+          fi
+          if [ "$SELECTED" != "binary" ]; then
+            echo "❌ '$SELECTED' is not produced by this workflow."
+            echo "This workflow only runs the build and package steps, so 'binary' is the"
+            echo "only selectable category. docker/execution-environment/helm artifacts are"
+            echo "built by the release workflow, not the PR check."
+            exit 1
+          fi
+          FOUND=$(find pre-release-artifacts -type f | sort)
+          if [ -z "$FOUND" ]; then
+            echo "❌ Resolved 'binary' but no artifacts were downloaded"
+            exit 1
+          fi
+          echo "Artifacts to attach:"
+          awk '{print "  " $0}' <<< "$FOUND"
+          {
+            echo "paths<<EOF"
+            echo "$FOUND"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Create pre-release
+        uses: calavia-org/workflows-lib/.github/actions/publish-github-release@v0
+        with:
+          version: 0.0.0-pr.${{ github.run_number }}
+          release-name: "Pre-release ${{ github.ref_name }} (build ${{ github.run_number }})"
+          release-notes: "Automated pre-release from build ${{ github.run_number }}. Artifact types: ${{ steps.artifacts.outputs.pre-release-artifacts }}"
+          prerelease: 'true'
+          draft: 'false'
+          artifacts: ${{ steps.select.outputs.paths }}
+          github-token: ${{ secrets.github-token }}
 
+  # Named `Test` and pinned to `always()` on purpose: `pr-check-and-test / Test` is a
+  # required status check on main in every consuming repo, so gating it on
+  # report-enabled would block every PR org-wide.
   report:
-    name: Publish Reports
-    needs: [detect, test]
+    name: Test
+    needs: [unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.report-enabled && always() }}
+    if: ${{ always() }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Publish reports
         uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
         with:
-          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
+          technology: ${{ inputs.technology }}
           report-enabled: ${{ inputs.report-enabled }}
           coverage-format: ${{ inputs.coverage-format }}
           coverage-tool: ${{ inputs.coverage-tool }}
@@ -574,3 +617,30 @@ jobs:
           slack-webhook: ${{ inputs.slack-webhook }}
           notify-on-failure: ${{ inputs.notify-on-failure }}
           summary-title: ${{ inputs.summary-title }}
+      - name: Verify required tests passed
+        if: ${{ always() }}
+        shell: bash
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          echo "Unit: $UNIT_RESULT"
+          echo "Integration: $INTEGRATION_RESULT"
+          FAILED=0
+          if [ "$UNIT_RESULT" != "success" ]; then
+            echo "❌ Unit tests did not pass (result: $UNIT_RESULT)."
+            FAILED=1
+          fi
+          # Integration is optional, so a skipped run is acceptable; a run that
+          # started and did not pass is not.
+          if [ "$INTEGRATION_RESULT" != "success" ] && [ "$INTEGRATION_RESULT" != "skipped" ]; then
+            echo "❌ Integration tests did not pass (result: $INTEGRATION_RESULT)."
+            FAILED=1
+          fi
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "This check gates the merge, so it must not report success while its"
+            echo "tests are failing or were cancelled."
+            exit 1
+          fi
+          echo "✅ Required tests passed."

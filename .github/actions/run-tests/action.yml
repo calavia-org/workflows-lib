@@ -21,6 +21,10 @@ inputs:
     description: 'Override test command'
     required: false
     default: ''
+  integration-test-command:
+    description: 'Override integration test command'
+    required: false
+    default: ''
   python-version:
     description: 'Python version for Python/Ansible projects'
     required: false
@@ -137,14 +141,14 @@ runs:
 
     - name: Setup Python
       if: steps.setup.outputs.python-version != ''
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
         cache: ${{ inputs.cache-enabled == 'true' && 'pip' || 'none' }}
 
     - name: Setup Node.js
       if: steps.setup.outputs.node-version != ''
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
         cache: ${{ inputs.cache-enabled == 'true' && 'npm' || 'none' }}
@@ -158,9 +162,11 @@ runs:
 
     - name: Setup Rust
       if: steps.setup.outputs.rust-toolchain != ''
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ inputs.rust-toolchain }}
+      shell: bash
+      run: |
+        rustup toolchain install ${{ inputs.rust-toolchain }} --profile minimal
+        rustup default ${{ inputs.rust-toolchain }}
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
     - name: Setup Java
       if: steps.setup.outputs.java-version != ''
@@ -169,6 +175,17 @@ runs:
         java-version: ${{ inputs.java-version }}
         distribution: ${{ inputs.java-distribution }}
         cache: ${{ inputs.cache-enabled == 'true' && 'maven' || 'none' }}
+
+    - name: Install tox
+      if: steps.setup.outputs.python-version != ''
+      shell: bash
+      run: |
+        if [ -f "${{ inputs.tox-ini }}" ]; then
+          python -m pip install --quiet tox
+          if [ "${{ inputs.technology }}" == "ansible" ]; then
+            python -m pip install --quiet tox-ansible
+          fi
+        fi
 
     - name: Determine test command
       id: test-cmd
@@ -271,9 +288,9 @@ runs:
           CMD="$CMD ${{ inputs.extra-args }}"
         fi
         
-        # Add coverage for Python
+        # Add coverage for Python (tox handles its own args)
         if [ "${{ inputs.technology }}" == "python" ] || [ "${{ inputs.technology }}" == "ansible" ]; then
-          if [ "${{ inputs.coverage-report }}" == "true" ]; then
+          if [ "${{ inputs.coverage-report }}" == "true" ] && [[ "$CMD" != *"tox"* ]]; then
             CMD="$CMD --cov=. --cov-report=${{ inputs.coverage-format }}"
           fi
         fi
@@ -285,11 +302,13 @@ runs:
           fi
         fi
         
-        # Add test output format
+        # Add test output format (skip for tox)
         if [ "${{ inputs.test-report-format }}" == "junit" ]; then
           case "${{ inputs.technology }}" in
             python|ansible)
-              CMD="$CMD --junitxml=test-results.xml"
+              if [[ "$CMD" != *"tox"* ]]; then
+                CMD="$CMD --junitxml=test-results.xml"
+              fi
               ;;
             nodejs)
               CMD="$CMD --reporters=default --reporters=jest-junit"
@@ -315,6 +334,13 @@ runs:
       run: |
         echo "Running integration tests..."
         TECH="${{ inputs.technology }}"
+        
+        # Use custom integration command if provided
+        if [ -n "${{ inputs.integration-test-command }}" ]; then
+          echo "Using custom integration test command: ${{ inputs.integration-test-command }}"
+          eval "${{ inputs.integration-test-command }}"
+          exit 0
+        fi
         
         case "$TECH" in
           python)
@@ -392,24 +418,37 @@ runs:
       run: |
         echo "Collecting test results..."
         mkdir -p test-results
-        
-        # Find and collect test result files
-        find . -name "test-results*.xml" -o -name "test-results*.json" -o -name "junit*.xml" | while read file; do
-          cp "$file" test-results/
-        done
-        
-        # Find and collect coverage reports
-        find . -name "coverage*.xml" -o -name "coverage*.json" -o -name "coverage*.html" | while read file; do
-          cp "$file" test-results/
-        done
-        
+
+        collect() {
+          local pattern="$1"
+          while IFS= read -r file; do
+            # Skip files already living in the destination directory
+            [ -z "$file" ] && continue
+            local dest="test-results/$(basename "$file")"
+            if [ "$file" = "./$dest" ]; then
+              echo "  already in place: $dest"
+              continue
+            fi
+            cp "$file" "$dest"
+            echo "  collected: $file -> $dest"
+          done < <(find . -path ./.git -prune -o -type f -name "$pattern" -print)
+        }
+
+        collect "test-results*.xml"
+        collect "test-results*.json"
+        collect "junit*.xml"
+        collect "coverage*.xml"
+        collect "coverage*.json"
+        collect "coverage*.html"
+
         echo "Test results collected"
         ls -la test-results/
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: test-results-${{ inputs.technology }}
         path: test-results/
         retention-days: 7
+        if-no-files-found: ignore

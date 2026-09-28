@@ -71,7 +71,7 @@ runs:
   steps:
     - name: Download test artifacts
       if: inputs.report-enabled == 'true'
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         path: ${{ inputs.test-results-path }}
         pattern: test-results-*
@@ -101,29 +101,10 @@ runs:
         if [ -n "$COVERAGE_FILES" ]; then
           echo "Found coverage files:"
           echo "$COVERAGE_FILES"
-          
-          # Upload to Codecov if token is provided
-          if [ -n "${{ inputs.codecov-token }}" ]; then
-            echo "Uploading to Codecov..."
-            # Codecov upload will be handled by the codecov action
-            echo "Coverage files ready for upload"
-          else
-            echo "No Codecov token provided. Coverage files available in artifacts."
-          fi
+          echo "Coverage files are distributed via workflow artifacts."
         else
           echo "No coverage files found"
         fi
-
-    - name: Upload coverage to Codecov
-      if: inputs.publish-coverage == 'true' && inputs.codecov-token != '' && inputs.report-enabled == 'true'
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ inputs.codecov-token }}
-        files: |
-          ${{ inputs.test-results-path }}/coverage*.xml
-          ${{ inputs.test-results-path }}/coverage*.json
-        fail_ci_if_error: false
-        verbose: true
 
     - name: Publish SARIF reports
       if: inputs.publish-sarif == 'true' && inputs.report-enabled == 'true'
@@ -181,20 +162,19 @@ runs:
 
     - name: Comment on PR
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && inputs.report-enabled == 'true'
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
+      env:
+        COVERAGE_STATUS: ${{ inputs.publish-coverage == 'true' && 'Available' || 'Not published' }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const fs = require('fs');
-          const path = require('path');
-          
           // Generate a simple comment
           const summary = `# ${{ inputs.summary-title }}\n\n` +
             `**Technology:** ${{ inputs.technology }}\n\n` +
             `✅ CI workflow completed. Check the [Actions run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed results.\n\n` +
             `**Artifacts:**\n` +
             `- Test results: Available\n` +
-            `- Coverage report: ${{ inputs.publish-coverage == 'true' ? 'Available' : 'Not published' }}\n` +
+            `- Coverage report: ${process.env.COVERAGE_STATUS}\n` +
             `- Retention: ${{ inputs.artifact-retention-days }} days\n`;
           
           // Post comment on PR
