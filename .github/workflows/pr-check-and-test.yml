@@ -293,10 +293,10 @@ jobs:
 
   build:
     name: Build
-    needs: [detect, unit]
+    needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-build && always() && (needs.unit.result == 'success' || needs.unit.result == 'skipped') }}
+    if: ${{ inputs.run-build }}
     steps:
       - uses: actions/checkout@v6
       - name: Setup environment
@@ -392,10 +392,10 @@ jobs:
 
   package:
     name: Package
-    needs: [detect, build]
+    needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-package && always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ inputs.run-package }}
     steps:
       - uses: actions/checkout@v6
       - name: Run package
@@ -481,16 +481,19 @@ jobs:
           retention-days: ${{ inputs.artifact-retention-days }}
           if-no-files-found: ignore
 
-  # Integration tests run last, after the build and package steps, and are the
-  # only part of the chain a consumer may skip. They are the slow, environment
-  # heavy tier (molecule/Docker), so keeping them out of the mandatory unit
-  # gate is what makes that gate fast.
+  # Integration tests do not consume `build-output` or `package-output`; they
+  # set up their own environment from the checked-out source. They therefore
+  # start as soon as `detect` finishes, alongside `build`, `package` and
+  # `unit`, instead of queueing behind them. They are the slow, environment
+  # heavy tier (molecule/Docker), and because they usually dominate the
+  # critical path, overlapping them with the other tiers is what keeps the
+  # whole run close to the duration of integration alone.
   integration:
     name: Integration Test
-    needs: [detect, package]
+    needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-integration-tests && always() && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ inputs.run-integration-tests }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
@@ -523,12 +526,17 @@ jobs:
   # PRs against main never create a release. The artifact list is resolved per
   # technology, which is what keeps the Ansible execution environment out of a
   # pre-release while the real release still builds it.
+  #
+  # `build` and `package` no longer gate each other, so this job waits on the
+  # `report` job: that is the single place where unit, integration and package
+  # results are already combined into one verdict, and depending on it keeps
+  # "tests pass" and "release exists" impossible to disagree.
   pre-release:
     name: Pre-Release
-    needs: [unit, package, integration]
+    needs: [report, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.unit.result == 'success' && (needs.integration.result == 'success' || needs.integration.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.report.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
       - name: Detect pre-release artifacts
