@@ -617,3 +617,30 @@ jobs:
           slack-webhook: ${{ inputs.slack-webhook }}
           notify-on-failure: ${{ inputs.notify-on-failure }}
           summary-title: ${{ inputs.summary-title }}
+      - name: Verify required tests passed
+        if: ${{ always() }}
+        shell: bash
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          echo "Unit: $UNIT_RESULT"
+          echo "Integration: $INTEGRATION_RESULT"
+          FAILED=0
+          if [ "$UNIT_RESULT" != "success" ]; then
+            echo "❌ Unit tests did not pass (result: $UNIT_RESULT)."
+            FAILED=1
+          fi
+          # Integration is optional, so a skipped run is acceptable; a run that
+          # started and did not pass is not.
+          if [ "$INTEGRATION_RESULT" != "success" ] && [ "$INTEGRATION_RESULT" != "skipped" ]; then
+            echo "❌ Integration tests did not pass (result: $INTEGRATION_RESULT)."
+            FAILED=1
+          fi
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "This check gates the merge, so it must not report success while its"
+            echo "tests are failing or were cancelled."
+            exit 1
+          fi
+          echo "✅ Required tests passed."
