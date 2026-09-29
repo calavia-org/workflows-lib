@@ -414,10 +414,14 @@ jobs:
 
   package:
     name: Package
-    needs: detect
+    # `build` is a prerequisite: some technologies package the build output
+    # (the `docker` case `docker save`s an image produced by `docker build`).
+    # A `failed` build is not accepted: there is nothing to package. When
+    # `build` is disabled the result is `skipped`, which is accepted.
+    needs: [detect, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-package }}
+    if: ${{ always() && inputs.run-package && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v6
         with:

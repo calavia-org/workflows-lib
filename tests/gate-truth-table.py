@@ -110,7 +110,12 @@ def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=Non
     results = {}
     for name in topo(jobs):
         cond = jobs[name].get("if")
-        inputs = dict(defaults, **{"prerelease-enabled": prerelease})
+        # Scenario overrides are written with underscores for Python style, but the
+        # workflow spells them with hyphens (`inputs.run-build`). Without this the
+        # override lands under a key nothing reads, and a "disabled" scenario would
+        # silently exercise the enabled path and still pass.
+        raw = dict(defaults, **{"prerelease-enabled": prerelease})
+        inputs = {k.replace("_", "-"): v for k, v in raw.items()}
         blocked = any(results.get(d) != "success" for d in needs_of(jobs, name))
         if blocked and not has_status_fn(cond):
             results[name] = "skipped"
@@ -132,6 +137,7 @@ def main():
 
     expected = {
         "unit": ["detect", "build"],
+        "package": ["detect", "build"],
         "integration": ["detect", "package"],
         "report": ["unit", "integration", "build", "package", "pre-commit"],
         "pre-release": ["report"],
@@ -140,7 +146,7 @@ def main():
         if needs_of(jobs, job) != deps:
             print(f"FAIL drift: {job}.needs == {needs_of(jobs, job)}, expected {deps}")
             return 1
-    for job in ("unit", "integration"):
+    for job in ("unit", "integration", "package"):
         if not has_status_fn(jobs[job].get("if")):
             print(f"FAIL: {job}.if lost always()")
             return 1
@@ -210,12 +216,47 @@ def main():
         ok_all &= good
         print(f"  {'ok ' if good else 'FAIL'} {label:<36} {detail}")
 
-    print("\noptional stages disabled must stay green:")
-    scenario("pre-commit disabled", set(), True, run_pre_commit=False)
-    scenario("integration disabled", set(), True, run_integration_tests=False)
-    scenario("build disabled", set(), True, run_build=False)
-    scenario("package disabled", set(), True, run_package=False)
-    scenario("all enabled", set(), True, **{"run-package": True})
+    print("\npackage waits for build without breaking a disabled build:")
+    for label, over, fail, want_pkg, want_gate in (
+        ("build disabled, package runs", {"run_build": False}, set(), "success", "success"),
+        ("build enabled and green", {"run_build": True}, set(), "success", "success"),
+        ("build fails, package skips", {"run_build": True}, {"build"}, "skipped", "failure"),
+    ):
+        r = run(
+            jobs,
+            dict(defaults, **{"run-package": True}, **over),
+            fail,
+            script=script,
+            env_exprs=env_exprs,
+        )
+        good = r["package"] == want_pkg and r["report"] == want_gate
+        ok_all &= good
+        print(
+            f"  {'ok ' if good else 'FAIL'} {label:<36} package={r['package']} "
+            f"report={r['report']} (expected {want_pkg}/{want_gate})"
+        )
+
+    print("\noptional stages disabled must stay green AND actually be skipped:")
+    # Asserting only that the gate stays green is not enough: a `skipped` job and
+    # a job that quietly ran both leave the gate green, so the scenario would pass
+    # even if the override never reached the `if` condition.
+    for label, job, over in (
+        ("pre-commit disabled", "pre-commit", {"run_pre_commit": False}),
+        ("integration disabled", "integration", {"run_integration_tests": False}),
+        ("build disabled", "build", {"run_build": False}),
+        ("package disabled", "package", {"run_package": False}),
+    ):
+        r = run(jobs, dict(defaults, **over), set(), script=script, env_exprs=env_exprs)
+        passed, out = run_gate(script, r, env_exprs)
+        good = passed and r[job] == "skipped"
+        ok_all &= good
+        print(
+            f"  {'ok ' if good else 'FAIL'} {label:<36} {job}={r[job]} "
+            f"Test={'passes' if passed else 'fails'} (expected skipped/passes)"
+        )
+        if not good:
+            print("        " + out.replace("\n", "\n        "))
+    scenario("all enabled", set(), True, **{"run-package": True, "run_build": True})
 
     print("\npre-release only on release/* and only behind a green gate:")
     for label, base, fail, want in (
