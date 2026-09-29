@@ -6,3 +6,12 @@ repos:
     rev: v1.7.12
     hooks:
       - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: gate-truth-table
+        name: verify the Test gate cannot go green on a red prerequisite
+        entry: python3 tests/gate-truth-table.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-test\.yml|tests/gate-truth-table\.py)$'
