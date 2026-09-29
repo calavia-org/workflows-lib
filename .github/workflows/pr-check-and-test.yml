@@ -271,10 +271,13 @@ jobs:
   # packaged or integrated. Always runs, so a skipped unit job still reports.
   unit:
     name: Unit Test
-    needs: [detect, pre-commit]
+    # `build` is a prerequisite: for a technology whose unit tests run against
+    # the build output, there is nothing to test until `build` produces it.
+    # When `build` is disabled the result is `skipped`, which is accepted.
+    needs: [detect, pre-commit, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') }}
+    if: ${{ always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
@@ -508,10 +511,13 @@ jobs:
   # whole run close to the duration of integration alone.
   integration:
     name: Integration Test
-    needs: detect
+    # `package` is a prerequisite for the same reason as `build` for `unit`.
+    # `always()` is required: without it a *disabled* `package` would cascade
+    # an automatic skip into integration even when integration tests are on.
+    needs: [detect, package]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-integration-tests }}
+    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
@@ -553,10 +559,13 @@ jobs:
   # "tests pass" and "release exists" impossible to disagree.
   pre-release:
     name: Pre-Release
-    needs: [report, build]
+    # `report` is the single quality gate. It needs `build` and `package`, so
+    # both complete before this job starts and their artifacts are guaranteed
+    # to exist for the unfiltered `download-artifact` below.
+    needs: [report]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.report.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ inputs.prerelease-enabled && always() && startsWith(github.base_ref, 'release/') && needs.report.result == 'success' }}
     # Creating the GitHub Release is the only thing in this workflow that needs
     # write access, which is why it is scoped to this job alone.
     permissions:
@@ -631,7 +640,7 @@ jobs:
     # `package` is needed so that a failed package cannot leave this required
     # check green: a failed package skips `integration`, and a skipped
     # integration is otherwise indistinguishable from an intentional one.
-    needs: [unit, integration, package]
+    needs: [unit, integration, build, package]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -668,10 +677,12 @@ jobs:
         env:
           UNIT_RESULT: ${{ needs.unit.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
           echo "Unit: $UNIT_RESULT"
           echo "Integration: $INTEGRATION_RESULT"
+          echo "Build: $BUILD_RESULT"
           echo "Package: $PACKAGE_RESULT"
           FAILED=0
           if [ "$UNIT_RESULT" != "success" ]; then
@@ -689,6 +700,14 @@ jobs:
           # required `Test` check would go green while `Package` is red.
           if [ "$PACKAGE_RESULT" != "success" ] && [ "$PACKAGE_RESULT" != "skipped" ]; then
             echo "❌ Packaging did not pass (result: $PACKAGE_RESULT)."
+            FAILED=1
+          fi
+          # Currently redundant: a failed `build` skips `unit`, which the gate
+          # already rejects. Asserted anyway so the gate covers every job it
+          # depends on directly, and keeps that coverage if `unit` is ever
+          # decoupled from `build`.
+          if [ "$BUILD_RESULT" != "success" ] && [ "$BUILD_RESULT" != "skipped" ]; then
+            echo "❌ Build did not pass (result: $BUILD_RESULT)."
             FAILED=1
           fi
           if [ "$FAILED" -ne 0 ]; then
