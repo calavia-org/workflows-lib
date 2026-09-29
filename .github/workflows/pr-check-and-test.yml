@@ -267,17 +267,20 @@ jobs:
           fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
           run-all-files: 'true'
 
-  # Unit tests are the mandatory gate: they must pass before anything is built,
-  # packaged or integrated. Always runs, so a skipped unit job still reports.
+  # Unit tests are the mandatory gate for the code under test. Always runs, so a
+  # skipped unit job still reports instead of vanishing.
   unit:
     name: Unit Test
     # `build` is a prerequisite: for a technology whose unit tests run against
     # the build output, there is nothing to test until `build` produces it.
     # When `build` is disabled the result is `skipped`, which is accepted.
-    needs: [detect, pre-commit, build]
+    # `pre-commit` is deliberately NOT a prerequisite: lint is a quality check
+    # like the tests are, not an input the tests consume, so it is asserted by
+    # the `report` gate instead of blocking the tests from running.
+    needs: [detect, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && (needs.pre-commit.result == 'success' || needs.pre-commit.result == 'skipped') && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
@@ -637,10 +640,14 @@ jobs:
   # report-enabled would block every PR org-wide.
   report:
     name: Test
-    # `package` is needed so that a failed package cannot leave this required
-    # check green: a failed package skips `integration`, and a skipped
-    # integration is otherwise indistinguishable from an intentional one.
-    needs: [unit, integration, build, package]
+    # Every job listed here is asserted by the gate step below, which is required
+    # because GitHub reports an upstream failure to its dependents as `skipped`,
+    # not `failure`: a failed `package` skips `integration`, and a skipped
+    # `integration` is otherwise indistinguishable from an intentional one.
+    # `pre-commit` is listed even though no other job depends on it, so that its
+    # result is asserted directly rather than being enforced by accident through
+    # `unit` skipping.
+    needs: [unit, integration, build, package, pre-commit]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -679,11 +686,13 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
+          PRE_COMMIT_RESULT: ${{ needs.pre-commit.result }}
         run: |
           echo "Unit: $UNIT_RESULT"
           echo "Integration: $INTEGRATION_RESULT"
           echo "Build: $BUILD_RESULT"
           echo "Package: $PACKAGE_RESULT"
+          echo "Pre-Commit: $PRE_COMMIT_RESULT"
           FAILED=0
           if [ "$UNIT_RESULT" != "success" ]; then
             echo "❌ Unit tests did not pass (result: $UNIT_RESULT)."
@@ -708,6 +717,13 @@ jobs:
           # decoupled from `build`.
           if [ "$BUILD_RESULT" != "success" ] && [ "$BUILD_RESULT" != "skipped" ]; then
             echo "❌ Build did not pass (result: $BUILD_RESULT)."
+            FAILED=1
+          fi
+          # Not redundant, unlike `build` above: no job depends on `pre-commit`,
+          # so no skip can carry its failure here. Without this check a failing
+          # hook would leave the required `Test` check green.
+          if [ "$PRE_COMMIT_RESULT" != "success" ] && [ "$PRE_COMMIT_RESULT" != "skipped" ]; then
+            echo "❌ Pre-commit did not pass (result: $PRE_COMMIT_RESULT)."
             FAILED=1
           fi
           if [ "$FAILED" -ne 0 ]; then

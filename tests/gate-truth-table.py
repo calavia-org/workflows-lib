@@ -84,23 +84,29 @@ def has_status_fn(cond):
 
 
 def gate_script(jobs):
-    """Pull the real bash out of the gate step."""
+    """Pull the real bash and its env expressions out of the gate step."""
     for step in jobs["report"]["steps"]:
         if step.get("name") == GATE_STEP:
-            return step["run"], sorted((step.get("env") or {}).keys())
+            return step["run"], (step.get("env") or {})
     raise SystemExit(f"gate step {GATE_STEP!r} not found in report job")
 
 
-def run_gate(script, results, names):
-    """Execute the shipped gate with the given job results. Pass == exit 0."""
+def run_gate(script, results, env_exprs):
+    """Execute the shipped gate with the given job results. Pass == exit 0.
+
+    The job name is read out of each `needs.<job>.result` expression instead of
+    being derived from the variable name, so hyphenated jobs such as
+    `pre-commit` resolve correctly.
+    """
     env = dict(os.environ)
-    for n in names:
-        env[n] = results.get(n.lower().replace("_result", ""), "")
+    for var, expr in env_exprs.items():
+        m = re.search(r"needs\.([A-Za-z0-9_-]+)\.result", str(expr))
+        env[var] = results.get(m.group(1), "") if m else ""
     p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
     return p.returncode == 0, p.stdout.strip()
 
 
-def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=None, names=None):
+def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=None, env_exprs=None):
     results = {}
     for name in topo(jobs):
         cond = jobs[name].get("if")
@@ -114,7 +120,7 @@ def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=Non
             continue
         results[name] = "failure" if name in fail_jobs else "success"
         if name == "report" and results[name] == "success" and script:
-            ok, _ = run_gate(script, results, names)
+            ok, _ = run_gate(script, results, env_exprs)
             if not ok:
                 results[name] = "failure"
     return results
@@ -122,12 +128,12 @@ def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=Non
 
 def main():
     jobs, defaults = load()
-    script, names = gate_script(jobs)
+    script, env_exprs = gate_script(jobs)
 
     expected = {
-        "unit": ["detect", "pre-commit", "build"],
+        "unit": ["detect", "build"],
         "integration": ["detect", "package"],
-        "report": ["unit", "integration", "build", "package"],
+        "report": ["unit", "integration", "build", "package", "pre-commit"],
         "pre-release": ["report"],
     }
     for job, deps in expected.items():
@@ -141,7 +147,13 @@ def main():
     # Every prerequisite the graph wires into the gate must be asserted by the
     # gate itself, otherwise a red prerequisite hides behind a skip.
     blocks = re.findall(r"if \[(.*?)\]; then(.*?)fi", script, re.S)
-    for token in ("UNIT_RESULT", "INTEGRATION_RESULT", "BUILD_RESULT", "PACKAGE_RESULT"):
+    for token in (
+        "UNIT_RESULT",
+        "INTEGRATION_RESULT",
+        "BUILD_RESULT",
+        "PACKAGE_RESULT",
+        "PRE_COMMIT_RESULT",
+    ):
         if token not in script:
             print(f"FAIL: gate script never reads {token}")
             return 1
@@ -151,13 +163,20 @@ def main():
         if not asserted:
             print(f"FAIL: {token} is read but never sets FAILED=1")
             return 1
+    # A gate env var that does not resolve to a real job silently evaluates to
+    # "", so the checks above would pass while the gate never sees the result.
+    for var, expr in env_exprs.items():
+        m = re.search(r"needs\.([A-Za-z0-9_-]+)\.result", str(expr))
+        if not m or m.group(1) not in jobs:
+            print(f"FAIL: gate env {var} does not resolve to a known job: {expr!r}")
+            return 1
 
     ok_all = True
 
     def scenario(label, fail_jobs, expect_pass, **over):
         nonlocal ok_all
-        results = run(jobs, dict(defaults, **over), fail_jobs, script=script, names=names)
-        passed, out = run_gate(script, results, names)
+        results = run(jobs, dict(defaults, **over), fail_jobs, script=script, env_exprs=env_exprs)
+        passed, out = run_gate(script, results, env_exprs)
         good = passed == expect_pass
         ok_all &= good
         print(
@@ -172,7 +191,27 @@ def main():
     for job in ("unit", "integration", "build", "package", "pre-commit"):
         scenario(f"{job} fails", {job}, expect_pass=False, **{"run-package": True})
 
+    # The `expected` drift check above already guards the `needs` edge. This
+    # guards the OUTCOME: if the edge were restored together with a matching
+    # `if` condition, `unit` would go back to reporting `skipped` and hide the
+    # test results, even though the gate would still (accidentally) go red.
+    print("\npre-commit is enforced directly, not by skipping unit:")
+    r = run(
+        jobs,
+        dict(defaults, **{"run-package": True}),
+        {"pre-commit"},
+        script=script,
+        env_exprs=env_exprs,
+    )
+    for label, good, detail in (
+        ("unit still runs when pre-commit fails", r["unit"] == "success", f"unit={r['unit']}"),
+        ("gate fails on pre-commit alone", r["report"] == "failure", f"report={r['report']}"),
+    ):
+        ok_all &= good
+        print(f"  {'ok ' if good else 'FAIL'} {label:<36} {detail}")
+
     print("\noptional stages disabled must stay green:")
+    scenario("pre-commit disabled", set(), True, run_pre_commit=False)
     scenario("integration disabled", set(), True, run_integration_tests=False)
     scenario("build disabled", set(), True, run_build=False)
     scenario("package disabled", set(), True, run_package=False)
@@ -184,7 +223,7 @@ def main():
         ("base=release/*", "release/1.8.0", set(), "success"),
         ("red gate", "release/1.8.0", {"unit"}, "skipped"),
     ):
-        r = run(jobs, dict(defaults, **{"run-package": True}), fail, base, prerelease=True, script=script, names=names)
+        r = run(jobs, dict(defaults, **{"run-package": True}), fail, base, prerelease=True, script=script, env_exprs=env_exprs)
         good = r["pre-release"] == want
         ok_all &= good
         print(f"  {'ok ' if good else 'FAIL'} {label:<36} pre-release={r['pre-release']} (expected {want})")
