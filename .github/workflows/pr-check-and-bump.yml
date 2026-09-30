@@ -27,6 +27,10 @@ on:
         description: "Regex pattern for branches that should skip version bump (optional)"
         type: string
         default: ""
+      base-version-source:
+        description: "Where to read the base version for the bump: 'tag' (highest release tag on the base branch) or 'file' (the version file, i.e. the published source of truth). 'file' requires an explicit version-file."
+        type: string
+        default: "tag"
     secrets:
       github-token:
         description: "GitHub token with write permissions"
@@ -254,28 +258,52 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           git fetch origin "$BASE_BRANCH" --tags
 
-      - name: Get latest release tag from base branch
+      - name: Get base version for bump
         id: current
         env:
           BASE_BRANCH: ${{ github.base_ref }}
+          BASE_VERSION_SOURCE: ${{ inputs.base-version-source }}
+          VERSION_FILE: ${{ inputs.version-file }}
         run: |
-          # Derive the base version from the highest *release* tag reachable from
-          # the base branch. `git describe` is deliberately NOT used: it returns
-          # the most RECENT tag by commit distance, so a prerelease tag such as
-          # v0.0.0-pr.54 wins over v1.7.1 even though it sorts far lower. That
-          # made the bump action compute 0.0.1 and silently roll the version back.
-          LATEST_TAG=$(git tag --merged "origin/$BASE_BRANCH" \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V \
-            | tail -1 || true)
-          if [ -z "$LATEST_TAG" ]; then
-            echo "::warning::No release tag found on $BASE_BRANCH — defaulting base version to 0.0.0"
-            VERSION="0.0.0"
+          if [ "$BASE_VERSION_SOURCE" = "file" ]; then
+            # The version file is what actually gets published, so it is the only
+            # base that cannot disagree with the artifact. Tags lag: a merged
+            # bump commits version-file=1.7.2 while the newest tag is still
+            # v1.7.1, so tag-derived bases recompute 1.7.1 -> 1.7.2 and produce
+            # an empty diff. Only an explicit path is accepted here because
+            # version-file=auto is resolved inside bump-version-action, not here.
+            if [ -z "$VERSION_FILE" ] || [ "$VERSION_FILE" = "auto" ]; then
+              echo "::error::base-version-source 'file' requires an explicit version-file"
+              exit 1
+            fi
+            if [ ! -f "$VERSION_FILE" ]; then
+              echo "::error::version file not found: $VERSION_FILE"
+              exit 1
+            fi
+            VERSION=$(sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$VERSION_FILE" | head -1)
+            if [ -z "$VERSION" ]; then
+              echo "::error::no clean X.Y.Z version found in $VERSION_FILE"
+              exit 1
+            fi
+            echo "Base version read from $VERSION_FILE: $VERSION"
           else
-            VERSION="${LATEST_TAG#v}"
+            # Highest *release* tag reachable from the base branch. `git describe`
+            # is deliberately NOT used: it returns the most RECENT tag by commit
+            # distance, so a prerelease tag such as v0.0.0-pr.54 wins over v1.7.1
+            # even though it sorts far lower, making the bump roll the version back.
+            LATEST_TAG=$(git tag --merged "origin/$BASE_BRANCH" \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V \
+              | tail -1 || true)
+            if [ -z "$LATEST_TAG" ]; then
+              echo "::warning::No release tag found on $BASE_BRANCH — defaulting base version to 0.0.0"
+              VERSION="0.0.0"
+            else
+              VERSION="${LATEST_TAG#v}"
+            fi
+            echo "Latest release tag on $BASE_BRANCH: ${LATEST_TAG:-<none>} → base version: $VERSION"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Latest release tag on $BASE_BRANCH: ${LATEST_TAG:-<none>} → base version: $VERSION"
 
       - name: Bump version using custom action
         id: bump

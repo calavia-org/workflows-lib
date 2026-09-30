@@ -18,6 +18,8 @@ Validates PRs follow conventional commit format and automatically bumps version 
 | `allowed-branch-pattern` | Regex for branch names. Set empty to disable | No | `^(major\|feat\|fix\|doc)/.+` |
 | `allowed-target-branches` | Allowed target branches | No | `main,release/*` |
 | `version-file` | Path to version file, or `auto` for detection | No | `auto` |
+| `no-bump-branch-pattern` | Regex for branches that skip the bump. Leave empty to bump every allowed branch | No | `""` |
+| `base-version-source` | `tag` derives the base from the highest release tag; `file` reads it from `version-file`. `file` requires an explicit `version-file` | No | `tag` |
 | `fail-on-invalid-branch` | Fail if branch name doesn't match pattern | No | `false` |
 | `require-conventional-commits` | Fail if no conventional commits found | No | `true` |
 
@@ -93,9 +95,18 @@ For the conventional commit detection to work reliably with squash merges:
 2. **Validate branch name** (if configured)
 3. **Validate target branch** against allowed list
 4. **Parse conventional commits** in PR commits or PR title
-5. **Fetch latest tag** from target branch
+5. **Derive base version** — from the highest release tag on the target branch
+   (`base-version-source: tag`), or from `version-file` (`base-version-source: file`)
 6. **Bump version** using `bump-version-action`
 7. **Commit and push** version bump to PR branch (if not already bumped)
+
+Prerelease tags are never used as a base, and a bump that does not move the
+version forward is refused.
+
+> **Prefer `file` when the version file is published as-is** (e.g. an Ansible
+> Galaxy collection). A tag only moves when a release is cut, so two PRs merging
+> inside one release window both derive the same base and the second produces an
+> empty diff — the version silently does not advance.
 
 ## Dependencies
 

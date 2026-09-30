@@ -10,7 +10,14 @@ commit distance, so a prerelease tag (v0.0.0-pr.54) wins over a much higher
 release tag (v1.7.1). That made bump-version-action compute 0.0.1 and
 silently roll a released collection back, e.g. on every push to a dependabot
 branch whose auto-bump re-derived the base version.
+
+Second regression guarded: a tag-derived base cannot see a bump that has not
+been released yet. Two dependabot PRs merging inside one release window make
+the second derive 1.7.1 -> 1.7.2 against an already-bumped version file,
+produce an empty diff, and ship no version bump at all. `base-version-source:
+file` exists so the published version file, not the lagging tag, is the base.
 """
+import os
 import re
 import subprocess
 import sys
@@ -45,8 +52,12 @@ def step_script(name):
     raise SystemExit(f"step not found: {name}")
 
 
-def derive(tags, base="main"):
-    """Run the workflow's derivation against a synthetic repo of `tags`."""
+def derive(tags, base="main", source="tag", version_file=None, file_body=None):
+    """Run the workflow's derivation against a synthetic repo of `tags`.
+
+    source='tag'  → highest exact release tag (legacy default)
+    source='file' → the version named by version_file
+    """
     script = step_script_by_id(DERIVE_STEP_ID)
     with tempfile.TemporaryDirectory() as tmp:
         repo = f"{tmp}/repo"
@@ -66,11 +77,18 @@ def derive(tags, base="main"):
             ["git", "-C", repo, "fetch", "-q", "origin", base, "--tags"],
             capture_output=True,
         )
+        if file_body is not None:
+            target = os.path.join(repo, version_file)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as fh:
+                fh.write(file_body)
         env_out = f"{tmp}/out"
         full = (
             f"export GITHUB_OUTPUT={env_out}\n"
             f"export GITHUB_ENV={env_out}.env\n"
             f"export BASE_BRANCH={base}\n"
+            f"export BASE_VERSION_SOURCE={source}\n"
+            f"export VERSION_FILE={version_file or ''}\n"
             f"cd {repo}\n"
             + script
         )
@@ -85,7 +103,7 @@ def derive(tags, base="main"):
                         got = line.split("=", 1)[1].strip()
         except FileNotFoundError:
             pass
-        return got, proc.stdout + proc.stderr
+        return got, proc.returncode, proc.stdout + proc.stderr
 
 
 def forward_guard(base_version, new_version):
@@ -126,17 +144,60 @@ GUARDS = [
     ("1.7.1", "0.0.1", True, "REGRESSION: downgrade must be refused"),
 ]
 
+GALAXY = """---
+namespace: calaviaorg
+name: setup
+version: {version}
+readme: README.md
+authors:
+  - Jose Calavia
+dependencies:
+  ansible.posix: '>=1.5.4'
+"""
+
+VF = "collections/ansible_collections/calaviaorg/setup/galaxy.yml"
+
+# (tags, version_file, file_version, expect_version, expect_rc, why)
+FILE_CASES = [
+    (["v1.7.1"], VF, "1.7.2", "1.7.2", 0,
+     "REGRESSION: file ahead of tag (unreleased bump) must win over the tag"),
+    (["v1.7.1"], VF, "1.7.1", "1.7.1", 0,
+     "file and tag agree"),
+    ([], VF, "1.0.0", "1.0.0", 0,
+     "no tags at all, file present → use file, never the 0.0.0 fallback"),
+    (["v1.7.1"], VF, "1.7.10", "1.7.10", 0,
+     "file version wins even when a higher tag exists (file is the truth)"),
+    (["v1.7.1"], VF, "9.9.9-rc.1", None, 1,
+     "non-clean X.Y.Z version must be rejected, not silently bumped"),
+    (["v1.7.1"], "missing/galaxy.yml", "1.7.2", None, 1,
+     "missing version file must fail loudly"),
+    (["v1.7.1"], "auto", "1.7.2", None, 1,
+     "version-file=auto must be rejected (path is resolved inside the action)"),
+    (["v1.7.1"], "", "1.7.2", None, 1,
+     "empty version-file must be rejected"),
+]
+
 
 def main():
     failures = []
 
-    print("base version derivation")
+    print("base version derivation — source: tag (default)")
     for tags, expected, why in CASES:
-        got, log = derive(tags)
+        got, _, log = derive(tags)
         ok = got == expected
         print(f"  {'PASS' if ok else 'FAIL'}  expect={expected:<8} got={str(got):<8} {why}")
         if not ok:
             failures.append(f"derivation {tags}: expected {expected}, got {got}")
+            print(log)
+
+    print("\nbase version derivation — source: file")
+    for tags, vf, fv, expected, rc, why in FILE_CASES:
+        body = GALAXY.format(version=fv) if vf not in ("", "auto") and vf.startswith("collections/") else None
+        got, actual_rc, log = derive(tags, source="file", version_file=vf, file_body=body)
+        ok = got == expected and actual_rc == rc
+        print(f"  {'PASS' if ok else 'FAIL'}  expect={str(expected):<8} rc={rc}  got={str(got):<8} rc={actual_rc}  {why}")
+        if not ok:
+            failures.append(f"file source {vf} @ {fv}: expected {expected}/rc{rc}, got {got}/rc{actual_rc}")
             print(log)
 
     print("\nforward-move guard")
@@ -148,12 +209,13 @@ def main():
             failures.append(f"guard {base_v}->{new_v}: expected refuse={should_refuse}, got {refused}")
             print(log)
 
+    total = len(CASES) + len(FILE_CASES) + len(GUARDS)
     if failures:
         print(f"\n{len(failures)} failure(s):")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print(f"\nall {len(CASES) + len(GUARDS)} cases passed")
+    print(f"\nall {total} cases passed")
     return 0
 
 
