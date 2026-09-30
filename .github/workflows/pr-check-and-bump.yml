@@ -265,15 +265,28 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           git fetch origin "$BASE_BRANCH" --tags
 
-      - name: Get latest tag from base branch
+      - name: Get latest release tag from base branch
         id: current
         env:
           BASE_BRANCH: ${{ github.base_ref }}
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 "origin/$BASE_BRANCH" 2>/dev/null || echo "0.0.0")
-          VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
+          # Derive the base version from the highest *release* tag reachable from
+          # the base branch. `git describe` is deliberately NOT used: it returns
+          # the most RECENT tag by commit distance, so a prerelease tag such as
+          # v0.0.0-pr.54 wins over v1.7.1 even though it sorts far lower. That
+          # made the bump action compute 0.0.1 and silently roll the version back.
+          LATEST_TAG=$(git tag --merged "origin/$BASE_BRANCH" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1 || true)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::warning::No release tag found on $BASE_BRANCH — defaulting base version to 0.0.0"
+            VERSION="0.0.0"
+          else
+            VERSION="${LATEST_TAG#v}"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Latest tag on $BASE_BRANCH: $LATEST_TAG → base version: $VERSION"
+          echo "Latest release tag on $BASE_BRANCH: ${LATEST_TAG:-<none>} → base version: $VERSION"
 
       - name: Bump version using custom action
         id: bump
@@ -309,10 +322,27 @@ jobs:
         if: steps.check.outputs.changed == 'true' && steps.last_commit.outputs.already_bumped == 'false'
         env:
           BRANCH: ${{ github.head_ref }}
+          BASE_VERSION: ${{ steps.current.outputs.version }}
+          NEW_VERSION: ${{ steps.bump.outputs.new-version }}
         run: |
           FILE="${{ steps.bump.outputs.version-file }}"
-          NEW_VERSION="${{ steps.bump.outputs.new-version }}"
           TYPE="${{ needs.check-pr.outputs.bump_type }}"
+
+          # Fail safe: a bump must only ever move the version FORWARD, and only
+          # from a clean release base. A prerelease base (e.g. 0.0.0-pr.54) means
+          # the tag lookup went wrong; abort rather than roll an artifact back.
+          if ! printf '%s' "$BASE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Refusing to bump: base version '$BASE_VERSION' is not a clean release version"
+            echo "::error::The release-tag lookup returned a prerelease; abort rather than roll a released artifact back."
+            exit 1
+          fi
+
+          if ! [ "$NEW_VERSION" = "$(printf '%s\n%s\n' "$BASE_VERSION" "$NEW_VERSION" | sort -V | tail -1)" ] \
+            || [ "$NEW_VERSION" = "$BASE_VERSION" ]; then
+            echo "::error::Refusing version bump $BASE_VERSION → $NEW_VERSION (not a forward move)"
+            echo "::error::Check the release tags on the base branch; the bump was derived from a bad base version."
+            exit 1
+          fi
 
           git add "$FILE"
           git commit -m "chore: bump version to $NEW_VERSION ($TYPE)"
