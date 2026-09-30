@@ -15,3 +15,10 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/workflows/pr-check-and-test\.yml|tests/gate-truth-table\.py)$'
+
+      - id: bump-version-derivation
+        name: verify the version bump cannot roll a release back
+        entry: python3 tests/bump-version-derivation.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-version-derivation\.py)$'
