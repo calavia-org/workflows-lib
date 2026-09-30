@@ -55,9 +55,6 @@ jobs:
           BRANCH: ${{ github.head_ref }}
           PATTERN: ${{ inputs.no-bump-branch-pattern }}
         run: |
-          BRANCH="$BRANCH"
-          PATTERN="$PATTERN"
-
           if [ -z "$PATTERN" ]; then
             echo "should_bump=true" >> "$GITHUB_OUTPUT"
             echo "No no-bump pattern set, allowing bump"
@@ -79,9 +76,6 @@ jobs:
           BRANCH: ${{ github.head_ref }}
           PATTERN: ${{ inputs.allowed-branch-pattern }}
         run: |
-          BRANCH="$BRANCH"
-          PATTERN="$PATTERN"
-
           if [ -z "$PATTERN" ]; then
             echo "valid=true" >> "$GITHUB_OUTPUT"
             echo "Branch name validation disabled"
@@ -102,9 +96,6 @@ jobs:
           TARGET: ${{ github.base_ref }}
           ALLOWED: ${{ inputs.allowed-target-branches }}
         run: |
-          TARGET="$TARGET"
-          ALLOWED="$ALLOWED"
-
           # Convert comma-separated list to regex pattern
           PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
 
@@ -122,8 +113,6 @@ jobs:
           BASE_BRANCH: ${{ github.base_ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          BASE_BRANCH="$BASE_BRANCH"
-          
           # Get all commits in this PR
           COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --pretty=format:"%s")
           
