@@ -1,0 +1,38 @@
+name: Auto-bump version
+
+# workflows-lib versions itself through its own pr-check-and-bump contract, so
+# bump-version is the only code in this repository that ever writes VERSION.
+# Nothing else computes a version: release.yml reads the file, it never derives.
+#
+# This deliberately calls the contract through `$/` rather than `@v0`. The
+# floating tag lags the release that publishes it, so a ratchet here would mean a
+# fix merged to bump-version could not be used by the very release that ships it.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+jobs:
+  bump:
+    name: Check PR and bump version
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: $/.github/workflows/pr-check-and-bump.yml
+    with:
+      allowed-branch-pattern: "^(major|feat|fix|chore|docs|ci|test|refactor|perf|style)/.+"
+      allowed-target-branches: "main,release/*"
+      version-file: "VERSION"
+      # VERSION is what the release publishes, so it cannot disagree with the
+      # tag: reading the base from the tag would make the next bump a no-op diff.
+      base-version-source: "file"
+      fail-on-invalid-branch: true
+      require-conventional-commits: true
+      # Branches that must not produce a new version. `fix/` is intentionally
+      # absent: a merged security fix still needs a patch release.
+      no-bump-branch-pattern: "^(chore|docs|ci|test|refactor|perf|style)/.+"
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

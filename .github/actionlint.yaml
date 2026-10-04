@@ -1,0 +1,24 @@
+# actionlint configuration
+#
+# `$/` self-repository references are valid GitHub Actions syntax but are rejected
+# by actionlint, whose newest release (v1.7.12, 2026-03-30) predates the syntax
+# (announced 2026-07-30). Upstream support is not yet released.
+#
+# The rules below ignore ONLY the two errors that actionlint raises against a
+# valid `$/` ref — one for a step-level action ref, one for a reusable workflow
+# call. Both patterns are anchored to `$/` + `.github/` and exclude `@`, so a
+# pinned `$/...@ref` or any malformed `./`, cross-repo, or `{owner}/{repo}` ref
+# is still linted normally.
+#
+# A pinned local ref cannot be caught by actionlint at all (it silently accepts
+# both `$/...@ref` and `./...@ref`); the `guard` job in ci.yml enforces that.
+#
+# Remove this file once actionlint ships `$/` support.
+#
+# Refs: https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax
+#       https://docs.github.com/en/actions/reference/workflows-and-actions/metadata-syntax
+paths:
+  '.github/workflows/**/*.yml':
+    ignore:
+      - 'specifying action "\$/\.github/[^"@]+" in invalid format because ref is missing'
+      - 'reusable workflow call "\$/\.github/[^"@]+" at "uses" is not following the format'

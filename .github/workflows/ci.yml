@@ -53,33 +53,33 @@ jobs:
         run: python3 tests/validate-actions.py
 
   guard:
-    name: Guard reusable workflow self-references
+    name: Guard self-references
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      # The reusable workflows are called by other repositories, so their
-      # self-references must stay cross-repo and pinned. `$` and `./` are only
-      # known to be safe for a same-repo caller; whether `$` resolves to the
-      # defining repository or the caller from inside a called reusable workflow
-      # is unverified. Switching to either form could silently break every
-      # external consumer, so block it until it is proven with a real consumer run.
-      - name: Reject local self-reference forms in reusable workflows
+      # `$/` binds to the repo owning the file that contains the `uses:` line, at
+      # the running commit, and is documented for reusable workflow calls. This
+      # inverts the previous guard, which forced cross-repo `workflows-lib@v0`
+      # self-references — a ratchet, since a fix merged here could not be used by
+      # the release that publishes it. ("Runs as if part of the caller" still
+      # applies to context-driven actions like actions/checkout; unrelated.)
+      # Requires runner >= 2.336.0; unavailable on GitHub Enterprise Server.
+      - name: Enforce self-reference form
         run: |
           failed=0
-          for wf in pr-check-and-test.yml pr-check-github-action.yml release-artifacts.yml; do
-            path=".github/workflows/$wf"
-            if grep -nE 'uses:[[:space:]]+(\$\/|\./\.github/actions)' "$path"; then
-              echo "::error file=$path::local self-reference found; use calavia-org/workflows-lib@<ref>"
+          for path in .github/workflows/*.yml .github/actions/*/action.yml; do
+            # A local self-reference must never carry a ref. actionlint <= 1.7.12
+            # silently accepts a pinned local ref, so lint cannot catch this.
+            if grep -nE 'uses:[[:space:]]+(\$/|\./)\.github/[^[:space:]]*@' "$path"; then
+              echo "::error file=$path::local self-reference must not carry an @ref suffix"
               failed=1
             fi
-            refs=$(grep -oE 'calavia-org/workflows-lib/\.github/(actions|workflows)/[^[:space:]]+@[^[:space:]]+' "$path" | sed 's/.*@//' || true)
-            for ref in $refs; do
-              case "$ref" in
-                v[0-9]*) ;;
-                *) echo "::error file=$path::self-reference ref '$ref' must be a major-version tag"; failed=1 ;;
-              esac
-            done
+            # A reference back into this repository by owner/name is the ratchet.
+            if grep -nE 'calavia-org/workflows-lib/\.github/' "$path"; then
+              echo "::error file=$path::cross-repo self-reference found; use \$/ to bind to the running commit"
+              failed=1
+            fi
           done
           exit $failed
 
@@ -101,3 +101,12 @@ jobs:
 
       - name: Version bump derivation
         run: python3 tests/bump-version-derivation.py
+
+      - name: Technology detection
+        run: python3 tests/detect-technology.py
+
+      - name: Release floating tag derivation
+        run: python3 tests/release-github-floating-tag.py
+
+      - name: Version authority
+        run: python3 tests/version-authority.py

@@ -29,3 +29,24 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/actions/.*/action\.yml|tests/validate-actions\.py)$'
+
+      - id: detect-technology
+        name: verify technology detection pins the primary consumer vocabulary
+        entry: python3 tests/detect-technology.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/detect-technology/action\.yml|tests/detect-technology\.py)$'
+
+      - id: release-github-floating-tag
+        name: verify the release floating major tag derives from the created tag
+        entry: python3 tests/release-github-floating-tag.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/release-github/action\.yml|tests/release-github-floating-tag\.py)$'
+
+      - id: version-authority
+        name: verify bump-version stays the single version authority
+        entry: python3 tests/version-authority.py
+        language: system
+        pass_filenames: false
+        files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^VERSION$|tests/version-authority\.py)$'

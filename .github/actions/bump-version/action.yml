@@ -1,0 +1,200 @@
+name: Bump Version
+branding:
+  icon: tag
+  color: blue
+description: |
+  Bumps the version in a repository based on semantic versioning.
+  Auto-detects the technology from common version files or accepts an explicit file path.
+  Supports Ansible (galaxy.yml), Node.js (package.json), Python (pyproject.toml, setup.py),
+  Rust (Cargo.toml), and generic (VERSION, version.txt).
+
+inputs:
+  version-file:
+    description: |
+      Path to the version file. Use "auto" to detect from common files
+      (galaxy.yml, package.json, pyproject.toml, setup.py, Cargo.toml, VERSION, version.txt).
+    required: false
+    default: auto
+  bump-type:
+    description: |
+      Type of version bump: major, minor, or patch.
+    required: true
+  current-version:
+    description: |
+      Current version string (e.g., "1.2.3"). If not provided, the action will attempt
+      to read it from the version file.
+    required: false
+    default: ''
+
+outputs:
+  new-version:
+    description: The new version after bumping
+    value: ${{ steps.bump.outputs.new_version }}
+  version-file:
+    description: The detected or provided version file path
+    value: ${{ steps.detect.outputs.version_file }}
+  technology:
+    description: The detected technology (ansible, nodejs, python, rust, generic, manual)
+    value: ${{ steps.detect.outputs.technology }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect version file and technology
+      id: detect
+      shell: bash
+      run: |
+        VERSION_FILE="${{ inputs.version-file }}"
+
+        if [ "$VERSION_FILE" != "auto" ] && [ -f "$VERSION_FILE" ]; then
+          echo "Using provided version file: $VERSION_FILE"
+          echo "version_file=$VERSION_FILE" >> "$GITHUB_OUTPUT"
+          # Infer technology from file name/extension
+          case "$(basename "$VERSION_FILE")" in
+            galaxy.yml|galaxy.yaml)
+              echo "technology=ansible" >> "$GITHUB_OUTPUT"
+              ;;
+            package.json)
+              echo "technology=nodejs" >> "$GITHUB_OUTPUT"
+              ;;
+            pyproject.toml|setup.py)
+              echo "technology=python" >> "$GITHUB_OUTPUT"
+              ;;
+            Cargo.toml)
+              echo "technology=rust" >> "$GITHUB_OUTPUT"
+              ;;
+            VERSION|version.txt)
+              echo "technology=generic" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              # Fallback for unknown file types: write version only
+              echo "technology=manual" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+        else
+          # Auto-detect technology in priority order
+          if [ -f "galaxy.yml" ]; then
+            echo "technology=ansible" >> "$GITHUB_OUTPUT"
+            echo "version_file=galaxy.yml" >> "$GITHUB_OUTPUT"
+          elif [ -f "package.json" ]; then
+            echo "technology=nodejs" >> "$GITHUB_OUTPUT"
+            echo "version_file=package.json" >> "$GITHUB_OUTPUT"
+          elif [ -f "pyproject.toml" ]; then
+            echo "technology=python" >> "$GITHUB_OUTPUT"
+            echo "version_file=pyproject.toml" >> "$GITHUB_OUTPUT"
+          elif [ -f "setup.py" ]; then
+            echo "technology=python" >> "$GITHUB_OUTPUT"
+            echo "version_file=setup.py" >> "$GITHUB_OUTPUT"
+          elif [ -f "Cargo.toml" ]; then
+            echo "technology=rust" >> "$GITHUB_OUTPUT"
+            echo "version_file=Cargo.toml" >> "$GITHUB_OUTPUT"
+          elif [ -f "VERSION" ]; then
+            echo "technology=generic" >> "$GITHUB_OUTPUT"
+            echo "version_file=VERSION" >> "$GITHUB_OUTPUT"
+          elif [ -f "version.txt" ]; then
+            echo "technology=generic" >> "$GITHUB_OUTPUT"
+            echo "version_file=version.txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No version file detected. Supported: galaxy.yml, package.json, pyproject.toml, setup.py, Cargo.toml, VERSION, version.txt"
+            exit 1
+          fi
+        fi
+
+    - name: Read current version
+      id: read
+      shell: bash
+      run: |
+        TECH="${{ steps.detect.outputs.technology }}"
+        FILE="${{ steps.detect.outputs.version_file }}"
+
+        if [ -n "${{ inputs.current-version }}" ]; then
+          CURRENT="${{ inputs.current-version }}"
+        else
+          case "$TECH" in
+            ansible)
+              CURRENT=$(grep "^version:" "$FILE" | sed 's/version: *//')
+              ;;
+            nodejs)
+              CURRENT=$(jq -r '.version' "$FILE")
+              ;;
+            python)
+              if [ "$FILE" = "pyproject.toml" ]; then
+                CURRENT=$(grep -E "^version\s*=" "$FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+              else
+                CURRENT=$(grep -oE "version=['\"][^'\"]+['\"]" "$FILE" | head -1 | sed -E "s/version=['\"]([^'\"]+)['\"]/\1/")
+              fi
+              ;;
+            rust)
+              CURRENT=$(grep -E "^version\s*=" "$FILE" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+              ;;
+            generic|manual)
+              CURRENT=$(cat "$FILE" | tr -d '[:space:]')
+              ;;
+          esac
+        fi
+
+        echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+        echo "Current version: $CURRENT"
+
+    - name: Bump version
+      id: bump
+      shell: bash
+      run: |
+        CURRENT="${{ steps.read.outputs.current }}"
+        TYPE="${{ inputs.bump-type }}"
+
+        # Parse semver
+        MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+        MINOR=$(echo "$CURRENT" | cut -d. -f2)
+        PATCH=$(echo "$CURRENT" | cut -d. -f3)
+
+        case "$TYPE" in
+          major)
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            ;;
+          minor)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            ;;
+          patch)
+            PATCH=$((PATCH + 1))
+            ;;
+        esac
+
+        NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+        echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        echo "Bumping $CURRENT -> $NEW_VERSION ($TYPE)"
+
+    - name: Update version file
+      id: update
+      shell: bash
+      run: |
+        TECH="${{ steps.detect.outputs.technology }}"
+        FILE="${{ steps.detect.outputs.version_file }}"
+        NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+
+        case "$TECH" in
+          ansible)
+            sed -i "s/^version: .*/version: $NEW_VERSION/" "$FILE"
+            ;;
+          nodejs)
+            jq ".version = \"$NEW_VERSION\"" "$FILE" > tmp.json && mv tmp.json "$FILE"
+            ;;
+          python)
+            if [ "$FILE" = "pyproject.toml" ]; then
+              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$FILE"
+            else
+              sed -i "s/version=['\"].*['\"],/version='$NEW_VERSION',/" "$FILE"
+            fi
+            ;;
+          rust)
+            sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$FILE"
+            ;;
+          generic|manual)
+            echo "$NEW_VERSION" > "$FILE"
+            ;;
+        esac
+
+        echo "Updated $FILE with version $NEW_VERSION"

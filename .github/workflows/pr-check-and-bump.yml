@@ -271,7 +271,7 @@ jobs:
             # bump commits version-file=1.7.2 while the newest tag is still
             # v1.7.1, so tag-derived bases recompute 1.7.1 -> 1.7.2 and produce
             # an empty diff. Only an explicit path is accepted here because
-            # version-file=auto is resolved inside bump-version-action, not here.
+            # version-file=auto is resolved inside bump-version, not here.
             if [ -z "$VERSION_FILE" ] || [ "$VERSION_FILE" = "auto" ]; then
               echo "::error::base-version-source 'file' requires an explicit version-file"
               exit 1
@@ -307,7 +307,7 @@ jobs:
 
       - name: Bump version using custom action
         id: bump
-        uses: calavia-org/bump-version-action@v0
+        uses: $/.github/actions/bump-version
         with:
           version-file: ${{ inputs.version-file }}
           bump-type: ${{ needs.check-pr.outputs.bump_type }}

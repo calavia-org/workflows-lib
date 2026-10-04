@@ -245,7 +245,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: calavia-org/workflows-lib/.github/actions/detect-technology@v0
+      - uses: $/.github/actions/detect-technology
         id: detect
         with:
           fail-on-missing: ${{ inputs.fail-on-missing }}
@@ -260,7 +260,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: calavia-org/workflows-lib/.github/actions/setup-pre-commit@v0
+      - uses: $/.github/actions/setup-pre-commit
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           custom-config: ${{ inputs.custom-pre-commit-config }}
@@ -289,7 +289,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run unit tests
-        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        uses: $/.github/actions/run-tests
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           run-unit-tests: ${{ inputs.run-unit-tests }}
@@ -322,7 +322,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup environment
-        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        uses: $/.github/actions/run-tests
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           run-unit-tests: false
@@ -533,7 +533,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run integration tests
-        uses: calavia-org/workflows-lib/.github/actions/run-tests@v0
+        uses: $/.github/actions/run-tests
         with:
           technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           run-unit-tests: false
@@ -583,7 +583,7 @@ jobs:
           persist-credentials: false
       - name: Detect pre-release artifacts
         id: artifacts
-        uses: calavia-org/workflows-lib/.github/actions/detect-artifacts@v0
+        uses: $/.github/actions/detect-artifacts
         with:
           pre-release-artifacts: ${{ inputs.pre-release-artifacts }}
       - name: Download build and package artifacts
@@ -629,7 +629,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Create pre-release
-        uses: calavia-org/workflows-lib/.github/actions/publish-github-release@v0
+        uses: $/.github/actions/publish-github-release
         with:
           version: 0.0.0-pr.${{ github.run_number }}
           release-name: "Pre-release ${{ github.ref_name }} (build ${{ github.run_number }})"
@@ -666,7 +666,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Publish reports
-        uses: calavia-org/workflows-lib/.github/actions/publish-reports@v0
+        uses: $/.github/actions/publish-reports
         with:
           technology: ${{ inputs.technology }}
           report-enabled: ${{ inputs.report-enabled }}
