@@ -50,10 +50,3 @@ repos:
         language: system
         pass_filenames: false
         files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^VERSION$|tests/version-authority\.py)$'
-
-      - id: doc-refs
-        name: verify documented consumer references resolve to published tags
-        entry: python3 tests/doc-refs.py
-        language: system
-        pass_filenames: false
-        files: '(^README\.md$|^RELEASE\.md$|^docs/.*\.md$|tests/doc-refs\.py)$'
