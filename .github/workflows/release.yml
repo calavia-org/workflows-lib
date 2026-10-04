@@ -1,0 +1,75 @@
+name: Release
+
+# Self-release entrypoint for workflows-lib itself.
+#
+# It calls the local release contract via `$/`, so the release logic used to cut
+# a version is always the code sitting in the triggering commit. Referencing
+# `@v0` here would create a ratchet: the floating tag lags the release contract
+# that produced it, so a bug fixed in this contract could not be used to cut the
+# very release that publishes the fix.
+#
+# The version is never derived here. `VERSION` is owned by bump-version (wired
+# through pr-check-and-bump.yml), and this workflow only reads it, so there is a
+# single authority for what the current version is. Releasing is therefore a
+# consequence of the version file moving, not of guessing from commit types.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  resolve:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      should-release: ${{ steps.resolve.outputs.should_release }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Read VERSION and compare against the latest tag
+        id: resolve
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSION is missing. bump-version owns this file; restore it before releasing."
+            exit 1
+          fi
+
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::VERSION contains '$VERSION', which is not a clean release version"
+            exit 1
+          fi
+
+          # Comparing against the tag makes idempotence a property of the version
+          # file rather than of commit-type heuristics: a release can be skipped
+          # exactly when bump-version did not move the version.
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo '')
+          if [ "v$VERSION" = "$LATEST_TAG" ]; then
+            echo "VERSION $VERSION is already released as $LATEST_TAG; nothing to do"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION $VERSION → tag (latest was ${LATEST_TAG:-<none>})"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release
+    needs: resolve
+    if: needs.resolve.outputs.should-release == 'true'
+    permissions:
+      contents: write
+    uses: $/.github/workflows/release-github.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      runner-label: ubuntu-24.04
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

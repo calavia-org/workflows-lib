@@ -1,0 +1,113 @@
+name: Release to GitHub
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.3). Required and never derived here: bump-version is the single version authority, so the caller supplies the version explicitly.'
+        type: string
+        required: true
+      release-name:
+        description: 'Override the release name (default: "Release vX.Y.Z")'
+        type: string
+        required: false
+        default: ''
+      body:
+        description: 'Release notes body (overrides the auto-generated changelog)'
+        type: string
+        required: false
+        default: ''
+      files:
+        description: 'Newline-delimited glob patterns of release artifacts to upload'
+        type: string
+        required: false
+        default: ''
+      draft:
+        description: 'Create the release as a draft'
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        type: boolean
+        required: false
+        default: false
+      skip-release-types:
+        description: 'Comma-separated conventional commit types that should skip the release (e.g., "docs,chore,style")'
+        type: string
+        required: false
+        default: ''
+      runner-label:
+        description: 'Runner label'
+        type: string
+        required: false
+        default: 'ubuntu-24.04'
+      timeout-minutes:
+        description: 'Job timeout in minutes'
+        type: number
+        required: false
+        default: 30
+    secrets:
+      github-token:
+        description: 'GitHub token with write permissions'
+        required: true
+    outputs:
+      version:
+        description: 'Released version (e.g., 1.2.3)'
+        value: ${{ jobs.release.outputs.version }}
+      tag:
+        description: 'Created git tag (e.g., v1.2.3)'
+        value: ${{ jobs.release.outputs.tag }}
+      release-url:
+        description: 'URL to the created GitHub release'
+        value: ${{ jobs.release.outputs.release-url }}
+      release-id:
+        description: 'ID of the created GitHub release'
+        value: ${{ jobs.release.outputs.release-id }}
+      release-type:
+        description: 'Release type: major, minor, patch, or custom'
+        value: ${{ jobs.release.outputs.release-type }}
+      major-tag:
+        description: 'Updated floating major tag (e.g., v1)'
+        value: ${{ jobs.release.outputs.major-tag }}
+      skipped:
+        description: 'Whether the release was skipped due to commit type'
+        value: ${{ jobs.release.outputs.skipped }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      release-url: ${{ steps.release.outputs.release-url }}
+      release-id: ${{ steps.release.outputs.release-id }}
+      release-type: ${{ steps.release.outputs.release-type }}
+      changelog: ${{ steps.release.outputs.changelog }}
+      major-tag: ${{ steps.release.outputs.major-tag }}
+      skipped: ${{ steps.release.outputs.skipped }}
+    steps:
+      # Full history plus tag refs are required: the implementation annotates a tag
+      # and force-moves the floating major tag, both of which need real refs.
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.github-token }}
+
+      - name: Create tag and GitHub release
+        id: release
+        uses: $/.github/actions/release-github
+        with:
+          version: ${{ inputs.version }}
+          release-name: ${{ inputs.release-name }}
+          body: ${{ inputs.body }}
+          files: ${{ inputs.files }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          skip-release-types: ${{ inputs.skip-release-types }}
+          github-token: ${{ secrets.github-token }}
