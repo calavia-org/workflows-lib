@@ -23,6 +23,13 @@ repos:
         pass_filenames: false
         files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-version-derivation\.py)$'
 
+      - id: bump-type-selection
+        name: verify a mixed feat and fix PR cannot be downgraded to a patch bump
+        entry: python3 tests/bump-type-selection.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-type-selection\.py)$'
+
       - id: validate-actions
         name: verify composite action metadata resolves to real steps
         entry: python3 tests/validate-actions.py
