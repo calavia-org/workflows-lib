@@ -110,4 +110,4 @@ version forward is refused.
 
 ## Dependencies
 
-- [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) — Technology-agnostic version bumping
+- [`bump-version`](../.github/actions/bump-version) — Technology-agnostic version bumping
