@@ -79,6 +79,56 @@ def _resolve(script: str, content: str) -> tuple[int, str | None]:
         return proc.returncode, resolved
 
 
+def _release_resolve_script() -> str | None:
+    """The verbatim shell that decides whether a release should happen."""
+    doc = yaml.safe_load(ENTRYPOINT.read_text())
+    for step in doc["jobs"]["resolve"]["steps"]:
+        if step.get("id") == "resolve":
+            return step["run"]
+    return None
+
+
+def _release_resolve(
+    script: str, content: str | None, tags: list[str]
+) -> tuple[int, str | None, str | None]:
+    """Run the release gate over a synthetic repo. Returns (rc, version, should_release).
+
+    Reads VERSION relative to cwd and shells out to `git describe`, so this needs
+    a real repository rather than a bare file. Each tag gets its own commit so
+    `git describe` resolves to exactly one answer instead of tie-breaking.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = pathlib.Path(tmp) / "repo"
+        repo.mkdir()
+        out = pathlib.Path(tmp) / "out"
+        out.write_text("")
+        for cmd in (
+            ["git", "init", "-q", "-b", "main", str(repo)],
+            ["git", "-C", str(repo), "config", "user.email", "t@example.com"],
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+        ):
+            subprocess.run(cmd, check=True, capture_output=True)
+        commit = ["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m", "c"]
+        subprocess.run(commit, check=True, capture_output=True)
+        for tag in tags:
+            subprocess.run(commit, check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "tag", tag], check=True)
+        if content is not None:
+            (repo / "VERSION").write_text(content)
+        proc = subprocess.run(
+            ["bash", "-e", "-c", script],
+            cwd=repo,
+            env={**os.environ, "GITHUB_OUTPUT": str(out)},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        outputs = dict(
+            line.split("=", 1) for line in out.read_text().splitlines() if "=" in line
+        )
+        return proc.returncode, outputs.get("version"), outputs.get("should_release")
+
+
 def main() -> int:
     failures: list[str] = []
     checked = 0
@@ -208,6 +258,39 @@ def main() -> int:
             f"exit={code} resolved={resolved!r}",
         )
 
+# 7. Section 6's argument, applied to the release gate: a wrong comparison here
+#    passes section 5's structural checks and then decides the opposite at run
+#    time — skipping a release that should ship, or republishing a shipped one.
+    rel = _release_resolve_script()
+    check("release resolve step exists", rel is not None)
+
+    if rel:
+        # (VERSION contents, tags, rc, version, should_release, why)
+        for content, tags, rc, ver, rel_out, why in [
+            ("0.16.0\n", ["v0.15.0"], 0, "0.16.0", "true",
+             "REGRESSION: a bumped VERSION past the latest tag must publish"),
+            ("0.15.0\n", ["v0.15.0"], 0, "0.15.0", "false",
+             "REGRESSION: an already-released VERSION must skip, not republish"),
+            ("0.16.0\n", [], 0, "0.16.0", "true",
+             "first release with no tags yet must publish"),
+            ("0.15.0\n", ["v0.14.0", "v0.15.0"], 0, "0.15.0", "false",
+             "the nearest reachable tag is the one that counts"),
+            ("0.16.0\n\n", ["v0.15.0"], 0, "0.16.0", "true",
+             "trailing blank lines must not break the read"),
+            (None, ["v0.15.0"], 1, None, None,
+             "a missing VERSION must fail loudly, never publish"),
+            ("0.16.0-rc.1\n", ["v0.15.0"], 1, None, None,
+             "a prerelease VERSION must be refused"),
+            ("not-a-version\n", ["v0.15.0"], 1, None, None,
+             "garbage VERSION must be refused"),
+        ]:
+            code, got_v, got_rel = _release_resolve(rel, content, tags)
+            check(
+                why,
+                code == rc and got_v == ver and got_rel == rel_out,
+                f"exit={code} version={got_v!r} should_release={got_rel!r}",
+            )
+
     if failures:
         print(f"version authority FAILED ({len(failures)} problem(s)):")
         for failure in failures:
@@ -216,7 +299,7 @@ def main() -> int:
 
     print(
         f"version authority OK ({checked} checks: contract, action, tag wiring, VERSION, "
-        "entrypoint, version-file reader/writer round trip)"
+        "entrypoint, version-file reader/writer round trip, release gate)"
     )
     return 0
 
