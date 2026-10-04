@@ -280,7 +280,16 @@ jobs:
               echo "::error::version file not found: $VERSION_FILE"
               exit 1
             fi
+            # bump-version has two writers, so two shapes must be readable. For `ansible` it
+            # rewrites the `version:` key; for `generic` — what a file named VERSION
+            # or version.txt resolves to — it writes a bare value via `echo > "$FILE"`.
+            # A keyed-only read made the base version unresolvable for exactly the
+            # files bump-version owns. Keyed is tried first so a galaxy.yml that also
+            # contains a bare-looking line cannot win over its real version key.
             VERSION=$(sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$VERSION_FILE" | head -1)
+            if [ -z "$VERSION" ]; then
+              VERSION=$(sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$VERSION_FILE" | head -1)
+            fi
             if [ -z "$VERSION" ]; then
               echo "::error::no clean X.Y.Z version found in $VERSION_FILE"
               exit 1

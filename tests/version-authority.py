@@ -15,9 +15,12 @@ Exit code 0 when every check passes, 1 otherwise.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+import subprocess
 import sys
+import tempfile
 
 import yaml
 
@@ -26,12 +29,63 @@ CONTRACT = ROOT / ".github" / "workflows" / "release-github.yml"
 ACTION = ROOT / ".github" / "actions" / "release-github" / "action.yml"
 ENTRYPOINT = ROOT / ".github" / "workflows" / "release.yml"
 VERSION_FILE = ROOT / "VERSION"
+BUMP_CONTRACT = ROOT / ".github" / "workflows" / "pr-check-and-bump.yml"
+BUMP_ACTION = ROOT / ".github" / "actions" / "bump-version" / "action.yml"
+
+
+def _reader_script() -> str | None:
+    """The verbatim shell that resolves the base version from the version file.
+
+    Taken through yaml.safe_load so the text is the same string GitHub runs,
+    not a reconstruction of it.
+    """
+    doc = yaml.safe_load(BUMP_CONTRACT.read_text())
+    for step in doc["jobs"]["auto-bump-version"]["steps"]:
+        if step.get("name") == "Get base version for bump":
+            return step["run"]
+    return None
+
+
+def _resolve(script: str, content: str) -> tuple[int, str | None]:
+    """Run the reader over `content` and return (exit code, resolved version)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        version_file = pathlib.Path(tmp) / "VERSION"
+        version_file.write_text(content)
+        # The block's last line appends to GITHUB_OUTPUT. Without a real file the
+        # redirect fails and, under `bash -e`, every case exits 1.
+        output = pathlib.Path(tmp) / "github_output"
+        output.write_text("")
+        proc = subprocess.run(
+            ["bash", "-e", "-c", script],
+            env={
+                **os.environ,
+                "BASE_VERSION_SOURCE": "file",
+                "VERSION_FILE": str(version_file),
+                "BASE_BRANCH": "main",
+                "GITHUB_OUTPUT": str(output),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        resolved = next(
+            (
+                line.split("=", 1)[1]
+                for line in output.read_text().splitlines()
+                if line.startswith("version=")
+            ),
+            None,
+        )
+        return proc.returncode, resolved
 
 
 def main() -> int:
     failures: list[str] = []
+    checked = 0
 
     def check(label: str, condition: bool, detail: str = "") -> None:
+        nonlocal checked
+        checked += 1
         if not condition:
             failures.append(f"{label}{f' -- {detail}' if detail else ''}")
 
@@ -105,13 +159,65 @@ def main() -> int:
         f"needs={release_job.get('needs')!r}",
     )
 
+    # 6. The reader that resolves the base version must accept every shape
+    #    bump-version's writers emit. Every check above is structural, which is
+    #    why a keyed-only reader passed all of them and still failed at run time:
+    #    bump-version writes a *bare* value for a file named VERSION, so nothing
+    #    structural could see the disagreement. These execute the real block.
+    update_steps = [
+        s for s in yaml.safe_load(BUMP_ACTION.read_text())["runs"]["steps"] if s.get("id") == "update"
+    ]
+    check("bump-version has one update step", len(update_steps) == 1, f"found {len(update_steps)}")
+
+    script = _reader_script()
+    check("base-version reader step exists", script is not None)
+
+    if update_steps and script:
+        writer = update_steps[0]["run"]
+        check(
+            "bump-version's generic writer emits a bare value",
+            "generic|manual)" in writer and 'echo "$NEW_VERSION" > "$FILE"' in writer,
+            "writer shape changed; the reader contract must be re-derived",
+        )
+
+        code, resolved = _resolve(script, "0.15.0\n")
+        check(
+            "reader resolves the bare value the writer emits",
+            code == 0 and resolved == "0.15.0",
+            f"exit={code} resolved={resolved!r}",
+        )
+
+        code, resolved = _resolve(script, "name: galaxy\nversion: 1.7.2\n")
+        check(
+            "reader still resolves a keyed version (galaxy.yml)",
+            code == 0 and resolved == "1.7.2",
+            f"exit={code} resolved={resolved!r}",
+        )
+
+        code, resolved = _resolve(script, "version: 2.0.0\n0.9.9\n")
+        check(
+            "keyed form wins over a stray bare line",
+            code == 0 and resolved == "2.0.0",
+            f"exit={code} resolved={resolved!r}",
+        )
+
+        code, resolved = _resolve(script, "not-a-version\n")
+        check(
+            "reader still rejects a file with no version",
+            code != 0 and resolved is None,
+            f"exit={code} resolved={resolved!r}",
+        )
+
     if failures:
         print(f"version authority FAILED ({len(failures)} problem(s)):")
         for failure in failures:
             print(f"  - {failure}")
         return 1
 
-    print("version authority OK (11 checks: contract, action, tag wiring, VERSION, entrypoint)")
+    print(
+        f"version authority OK ({checked} checks: contract, action, tag wiring, VERSION, "
+        "entrypoint, version-file reader/writer round trip)"
+    )
     return 0
 
 
