@@ -93,6 +93,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install tooling
+        run: python -m pip install --quiet pyyaml
+
       - name: Release gate truth table
         run: python3 tests/gate-truth-table.py
 
