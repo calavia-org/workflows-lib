@@ -24,6 +24,7 @@ runs:
         gpg_private_key: ${{ inputs.gpg-key }}
         passphrase: ${{ inputs.gpg-passphrase }}
     - name: Sign artifact
+      id: sign
       shell: bash
       run: |
         ARTIFACT="${{ inputs.artifact-path }}"
