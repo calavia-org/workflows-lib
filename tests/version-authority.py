@@ -79,6 +79,46 @@ def _resolve(script: str, content: str) -> tuple[int, str | None]:
         return proc.returncode, resolved
 
 
+def _bump_script() -> str | None:
+    """The verbatim shell that turns a current version plus a bump type into a new one."""
+    doc = yaml.safe_load(BUMP_ACTION.read_text())
+    for step in doc["runs"]["steps"]:
+        if step.get("id") == "bump":
+            return step["run"]
+    return None
+
+
+def _bump(script: str, current: str, bump_type: str) -> tuple[int, str | None]:
+    """Run the arithmetic for `current` + `bump_type`; return (exit code, new_version)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "out"
+        out.write_text("")
+        body = script.replace(
+            "${{ steps.read.outputs.current }}", "$SIM_CURRENT"
+        ).replace("${{ inputs.bump-type }}", "$SIM_TYPE")
+        proc = subprocess.run(
+            ["bash", "-e", "-c", body],
+            env={
+                **os.environ,
+                "SIM_CURRENT": current,
+                "SIM_TYPE": bump_type,
+                "GITHUB_OUTPUT": str(out),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        new = next(
+            (
+                line.split("=", 1)[1]
+                for line in out.read_text().splitlines()
+                if line.startswith("new_version=")
+            ),
+            None,
+        )
+        return proc.returncode, new
+
+
 def _release_resolve_script() -> str | None:
     """The verbatim shell that decides whether a release should happen."""
     doc = yaml.safe_load(ENTRYPOINT.read_text())
@@ -229,6 +269,30 @@ def main() -> int:
             "generic|manual)" in writer and 'echo "$NEW_VERSION" > "$FILE"' in writer,
             "writer shape changed; the reader contract must be re-derived",
         )
+
+# Distinct from the forward-move guard, which only proves a bump moves forward:
+# this proves `minor` produces the right number. Bumping PATCH instead still
+# passes that guard, so a wrong version would ship with every check green.
+        bump = _bump_script()
+        check("bump arithmetic step exists", bump is not None)
+
+        if bump:
+            for current, kind, want, why in [
+                ("0.15.0", "minor", "0.16.0",
+                 "REGRESSION: feat/ + 0.15.0 must yield 0.16.0, the version #62 ships"),
+                ("0.15.7", "minor", "0.16.0",
+                 "REGRESSION: minor must zero the patch, not carry it"),
+                ("0.15.0", "patch", "0.15.1", "patch moves only the patch"),
+                ("0.15.9", "patch", "0.15.10", "patch rolls into a double digit"),
+                ("0.15.0", "major", "1.0.0", "major zeroes minor and patch"),
+                ("0.9.9", "minor", "0.10.0", "minor rolls into a double digit"),
+            ]:
+                code, got = _bump(bump, current, kind)
+                check(
+                    why,
+                    code == 0 and got == want,
+                    f"{current} --{kind}--> exit={code} got={got!r} want={want!r}",
+                )
 
         code, resolved = _resolve(script, "0.15.0\n")
         check(
