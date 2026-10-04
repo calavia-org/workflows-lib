@@ -67,7 +67,7 @@ on:
 
 jobs:
   pr-check-and-bump:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
     with:
       allowed-branch-pattern: ""
       allowed-target-branches: "main,release/*"

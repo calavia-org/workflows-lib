@@ -38,16 +38,17 @@ Repositories consuming these workflows should reference version tags:
 
 ```yaml
 # Floating major version (recommended)
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
 
 # Specific version (for reproducibility)
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1.0.0
+uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0.0.2
 ```
 
 ## Breaking Changes
 
 Breaking changes trigger a major version bump. Consumers must manually update their references:
 
+<!-- doc-ref-test: skip — hypothetical before/after transition, so these majors are intentionally unpublished -->
 ```yaml
 # Before breaking change
 uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1

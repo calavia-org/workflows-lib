@@ -46,7 +46,7 @@ Reference workflows using the `uses` keyword in your repository:
 ```yaml
 jobs:
   pr-check:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
