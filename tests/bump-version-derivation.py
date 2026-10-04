@@ -157,6 +157,10 @@ dependencies:
 
 VF = "collections/ansible_collections/calaviaorg/setup/galaxy.yml"
 
+# Bare (keyless), because bump-version's generic writer emits no `version:` key.
+# A different on-disk shape from VF above, so it needs its own cases.
+BARE = "VERSION"
+
 # (tags, version_file, file_version, expect_version, expect_rc, why)
 FILE_CASES = [
     (["v1.7.1"], VF, "1.7.2", "1.7.2", 0,
@@ -175,6 +179,18 @@ FILE_CASES = [
      "version-file=auto must be rejected (path is resolved inside the action)"),
     (["v1.7.1"], "", "1.7.2", None, 1,
      "empty version-file must be rejected"),
+    (["v1.7.1"], BARE, "1.7.2", "1.7.2", 0,
+     "REGRESSION: bare VERSION must resolve, same as a keyed file"),
+    (["v1.7.1"], BARE, "1.7.1", "1.7.1", 0,
+     "bare file and tag agree"),
+    ([], BARE, "1.0.0", "1.0.0", 0,
+     "no tags, bare file present → use file, never the 0.0.0 fallback"),
+    (["v1.9.0"], BARE, "1.7.10", "1.7.10", 0,
+     "REGRESSION: bare file wins over a higher tag, as keyed does"),
+    (["v1.7.1"], BARE, "9.9.9-rc.1", None, 1,
+     "REGRESSION: non-clean bare version must be rejected, not bumped"),
+    (["v1.7.1"], "missing/VERSION", "1.7.2", None, 1,
+     "missing bare version file must fail loudly"),
 ]
 
 
@@ -192,7 +208,12 @@ def main():
 
     print("\nbase version derivation — source: file")
     for tags, vf, fv, expected, rc, why in FILE_CASES:
-        body = GALAXY.format(version=fv) if vf not in ("", "auto") and vf.startswith("collections/") else None
+        if vf == BARE:
+            body = f"{fv}\n"
+        elif vf.startswith("collections/"):
+            body = GALAXY.format(version=fv)
+        else:
+            body = None
         got, actual_rc, log = derive(tags, source="file", version_file=vf, file_body=body)
         ok = got == expected and actual_rc == rc
         print(f"  {'PASS' if ok else 'FAIL'}  expect={str(expected):<8} rc={rc}  got={str(got):<8} rc={actual_rc}  {why}")
