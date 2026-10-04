@@ -12,10 +12,23 @@ That is not hypothetical. This repository documented
 publishing only the `v0` line, so every consumer following the documented path
 resolved a nonexistent ref.
 
-Each reference is checked against the tags present in the clone. A fenced block
-carrying a `doc-ref-test: skip` comment on its opening prose line is exempt; that
-marker exists for before/after illustrations of the major-bump convention, which
-deliberately name versions that do not exist yet.
+Two properties are asserted per reference, because a `uses:` line needs both: the
+ref must be a published tag, and the path must exist *at that ref*. The second
+check is deliberately not a working-tree check. A path that exists only in the
+branch being merged, and in no published tag, passes a working-tree check while
+still 404ing in a consumer's run -- and that is precisely the state this
+repository is in between landing the consolidated actions and publishing the tag
+that carries them. Resolving `<ref>:<path>` asks git the question a consumer's
+workflow run actually asks.
+
+The consequence is intentional: this test forbids documenting a ref that has not
+been released yet. That is a feature. Forward references are exactly how the
+`@v1`/`@v1.0.0` examples survived review in the first place, so a migration guide
+must be written after the release that publishes its targets, not before.
+
+A fenced block carrying a `doc-ref-test: skip` comment on its opening prose line is
+exempt; that marker exists for before/after illustrations of the major-bump
+convention, which deliberately name versions that do not exist yet.
 
 Exit code 0 when every reference resolves, 1 otherwise.
 """
@@ -62,6 +75,28 @@ def local_tags() -> set[str]:
         print("error: no tags in this clone; run `git fetch --tags` (CI needs fetch-depth: 0)")
         sys.exit(1)
     return tags
+
+
+def path_exists_at_ref(ref: str, path: str) -> bool:
+    """Whether `path` is present in the tree that `ref` names.
+
+    A working-tree check is not enough. A path added on the current branch and
+    absent from every published tag passes `Path.exists()` while still failing in
+    a consumer's run, because GitHub resolves `@ref` first and only then looks
+    for the path inside it. `git cat-file -e <ref>:<path>` asks whether that
+    resolution succeeds.
+
+    Branches work as well as tags, so this stays meaningful if a doc ever pins a
+    moving ref.
+    """
+    proc = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{path}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0
 
 
 def checkable_lines(text: str) -> list[tuple[int, str]]:
@@ -121,8 +156,10 @@ def main() -> int:
 
                 if ref not in tags:
                     failures.append(f"{relative}:{number}: @{ref} matches no published tag")
-                elif not (ROOT / path).exists():
-                    failures.append(f"{relative}:{number}: {path} does not exist in the repository")
+                elif not path_exists_at_ref(ref, path):
+                    failures.append(
+                        f"{relative}:{number}: {path} does not exist at @{ref}"
+                    )
 
     for failure in failures:
         print(f"error: {failure}")
