@@ -44,8 +44,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPO = "calavia-org/workflows-lib"
 DOCS = ("README.md", "RELEASE.md", "docs/release-artifacts.md", "docs/pr-check-and-bump.md")
 
-# A documented reference: `uses: calavia-org/workflows-lib/<path>@<ref>`.
-USES_RE = re.compile(r"uses:\s*" + re.escape(REPO) + r"/(?P<path>[^\s@]+)@(?P<ref>[^\s]+)")
+# A documented reference: `<repo>/<path>@<ref>`, in any form documentation takes.
+# The `uses:` prefix is deliberately not required -- requiring it would exempt every
+# prose and markdown-table reference, which is how a migration guide is written and
+# where a stale ref would hide while still 404ing for a consumer.
+# Backtick, comma, semicolon and colon are excluded because git forbids them in a
+# refname, so in a document they can only be markdown punctuation. A trailing `.` is
+# legal inside a ref (`v0.15.0`) but illegal at the end of one, so it is stripped
+# after capture -- adding it to this class instead would reject every version tag.
+REF_RE = re.compile(
+    re.escape(REPO) + r"/(?P<path>[^\s@`+,;:]+)@(?P<ref>[^\s`+,;:]+)"
+)
 FENCE_RE = re.compile(r"^\s*```")
 SKIP_MARKER = "doc-ref-test: skip"
 
@@ -140,12 +149,13 @@ def main() -> int:
         text = doc.read_text(encoding="utf-8")
 
         checkable = checkable_lines(text)
-        raw_hits = sum(len(USES_RE.findall(line)) for line in text.splitlines())
-        exempted += raw_hits - sum(len(USES_RE.findall(line)) for _, line in checkable)
+        raw_hits = sum(len(REF_RE.findall(line)) for line in text.splitlines())
+        exempted += raw_hits - sum(len(REF_RE.findall(line)) for _, line in checkable)
 
         for number, line in checkable:
-            for match in USES_RE.finditer(line):
-                path, ref = match.group("path"), match.group("ref")
+            for match in REF_RE.finditer(line):
+                path = match.group("path")
+                ref = match.group("ref").rstrip(".")
 
                 # `actions/NAME@v0` is the documented path *template*, not a real
                 # action; its prose explains the shape without naming an action.
