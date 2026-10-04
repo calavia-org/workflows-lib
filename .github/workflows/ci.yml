@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install tooling
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet pre-commit pyyaml
+
+      # Runs actionlint (which includes shellcheck) plus the gate-truth-table and
+      # bump-version-derivation suites at the revisions pinned in
+      # .pre-commit-config.yaml, so this job cannot drift from local `pre-commit run`.
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  validate-actions:
+    name: Validate composite actions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install tooling
+        run: python -m pip install --quiet pyyaml
+
+      - name: Validate action metadata
+        run: python3 tests/validate-actions.py
+
+  guard:
+    name: Guard reusable workflow self-references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # The reusable workflows are called by other repositories, so their
+      # self-references must stay cross-repo and pinned. `$` and `./` are only
+      # known to be safe for a same-repo caller; whether `$` resolves to the
+      # defining repository or the caller from inside a called reusable workflow
+      # is unverified. Switching to either form could silently break every
+      # external consumer, so block it until it is proven with a real consumer run.
+      - name: Reject local self-reference forms in reusable workflows
+        run: |
+          failed=0
+          for wf in pr-check-and-test.yml pr-check-github-action.yml release-artifacts.yml; do
+            path=".github/workflows/$wf"
+            if grep -nE 'uses:[[:space:]]+(\$\/|\./\.github/actions)' "$path"; then
+              echo "::error file=$path::local self-reference found; use calavia-org/workflows-lib@<ref>"
+              failed=1
+            fi
+            refs=$(grep -oE 'calavia-org/workflows-lib/\.github/(actions|workflows)/[^[:space:]]+@[^[:space:]]+' "$path" | sed 's/.*@//' || true)
+            for ref in $refs; do
+              case "$ref" in
+                v[0-9]*) ;;
+                *) echo "::error file=$path::self-reference ref '$ref' must be a major-version tag"; failed=1 ;;
+              esac
+            done
+          done
+          exit $failed
+
+  test:
+    name: Test suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Release gate truth table
+        run: python3 tests/gate-truth-table.py
+
+      - name: Version bump derivation
+        run: python3 tests/bump-version-derivation.py

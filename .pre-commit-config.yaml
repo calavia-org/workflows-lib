@@ -22,3 +22,10 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-version-derivation\.py)$'
+
+      - id: validate-actions
+        name: verify composite action metadata resolves to real steps
+        entry: python3 tests/validate-actions.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/.*/action\.yml|tests/validate-actions\.py)$'
