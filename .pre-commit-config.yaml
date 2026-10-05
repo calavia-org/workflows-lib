@@ -22,3 +22,45 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-version-derivation\.py)$'
+
+      - id: bump-type-selection
+        name: verify a mixed feat and fix PR cannot be downgraded to a patch bump
+        entry: python3 tests/bump-type-selection.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-type-selection\.py)$'
+
+      - id: validate-actions
+        name: verify composite action metadata resolves to real steps
+        entry: python3 tests/validate-actions.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/.*/action\.yml|tests/validate-actions\.py)$'
+
+      - id: detect-technology
+        name: verify technology detection pins the primary consumer vocabulary
+        entry: python3 tests/detect-technology.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/detect-technology/action\.yml|tests/detect-technology\.py)$'
+
+      - id: release-github-floating-tag
+        name: verify the release floating major tag derives from the created tag
+        entry: python3 tests/release-github-floating-tag.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/release-github/action\.yml|tests/release-github-floating-tag\.py)$'
+
+      - id: version-authority
+        name: verify bump-version stays the single version authority
+        entry: python3 tests/version-authority.py
+        language: system
+        pass_filenames: false
+        files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/pr-check-and-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
+
+      - id: bump-guard-state
+        name: verify the bump guard detects an applied bump from PR state, not the last commit message
+        entry: python3 tests/bump-guard-state.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-guard-state\.py)$'

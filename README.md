@@ -37,7 +37,7 @@ This repository is designed to grow. Future additions may include:
 
 | Dependency | Repository | Purpose |
 |------------|------------|---------|
-| Version bumping | [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) | Composite action used inside `pr-check-and-bump.yml` |
+| Version bumping | [`bump-version`](.github/actions/bump-version) | Composite action used inside `pr-check-and-bump.yml` |
 
 ## Usage
 
@@ -46,7 +46,7 @@ Reference workflows using the `uses` keyword in your repository:
 ```yaml
 jobs:
   pr-check:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```

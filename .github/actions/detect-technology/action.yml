@@ -1,109 +1,224 @@
-name: 'Detect Technology'
-description: 'Detects the technology stack of the repository based on file indicators'
+name: 'Detect Technologies'
+description: 'Detects buildable technologies in a repository based on file indicators'
 inputs:
   fail-on-missing:
-    description: 'Fail the step when no technology is detected'
+    description: 'Fail if no technologies detected'
     required: false
     default: 'false'
 outputs:
   technologies:
     description: 'Comma-separated list of detected technologies'
     value: ${{ steps.detect.outputs.technologies }}
+  count:
+    description: 'Number of technologies detected'
+    value: ${{ steps.detect.outputs.count }}
+  python:
+    description: 'Path to Python indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.python }}
+  go:
+    description: 'Path to Go indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.go }}
+  rust:
+    description: 'Path to Rust indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.rust }}
+  java:
+    description: 'Path to Java indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.java }}
+  ansible-collection:
+    description: 'Path to Ansible collection indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.ansible-collection }}
+  container:
+    description: 'Path to Container indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.container }}
+  ansible-execution-environment:
+    description: 'Path to Ansible EE indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.ansible-execution-environment }}
+  helm:
+    description: 'Path to Helm indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.helm }}
+  nodejs:
+    description: 'Path to Node.js indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.nodejs }}
+  generic:
+    description: 'Path to generic build indicator file (empty if not detected)'
+    value: ${{ steps.detect.outputs.generic }}
   primary:
-    description: 'Primary technology for the repository'
+    description: 'Primary technology, in the vocabulary consumed by run-tests'
     value: ${{ steps.detect.outputs.primary }}
 runs:
   using: composite
   steps:
-    - name: Detect technology
+    - name: Detect technologies
       id: detect
-      env:
-        FAIL_ON_MISSING: ${{ inputs.fail-on-missing }}
       shell: bash
       run: |
         TECHS=""
-        PRIMARY=""
-        
-        # Check for Ansible
-        if [ -f "galaxy.yml" ] || [ -f "ansible.cfg" ]; then
-          TECHS="ansible,${TECHS}"
-          PRIMARY="ansible"
+        COUNT=0
+        PYTHON=""
+        GO=""
+        RUST=""
+        JAVA=""
+        ANSIBLE_COLLECTION=""
+        CONTAINER=""
+        ANSIBLE_EE=""
+        HELM=""
+        NODEJS=""
+        GENERIC=""
+
+        # Python detection
+        if [ -f "pyproject.toml" ]; then
+          PYTHON="pyproject.toml"
+        elif [ -f "setup.py" ]; then
+          PYTHON="setup.py"
+        elif [ -f "setup.cfg" ]; then
+          PYTHON="setup.cfg"
+        elif [ -f "requirements.txt" ]; then
+          PYTHON="requirements.txt"
+        elif [ -f "Pipfile" ]; then
+          PYTHON="Pipfile"
         fi
-        
-        # Check for Python
-        if [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "setup.cfg" ] || [ -f "requirements.txt" ] || [ -f "Pipfile" ]; then
+
+        if [ -n "$PYTHON" ]; then
           TECHS="python,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="python"
-          fi
+          COUNT=$((COUNT + 1))
         fi
-        
-        # Check for Node.js
-        if [ -f "package.json" ]; then
-          TECHS="nodejs,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="nodejs"
-          fi
-        fi
-        
-        # Check for Go
+
+        # Go detection
         if [ -f "go.mod" ]; then
+          GO="go.mod"
           TECHS="go,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="go"
-          fi
+          COUNT=$((COUNT + 1))
         fi
-        
-        # Check for Rust
+
+        # Rust detection
         if [ -f "Cargo.toml" ]; then
+          RUST="Cargo.toml"
           TECHS="rust,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="rust"
-          fi
+          COUNT=$((COUNT + 1))
         fi
-        
-        # Check for Java
-        if [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+
+        # Java detection
+        if [ -f "pom.xml" ]; then
+          JAVA="pom.xml"
+        elif [ -f "build.gradle" ]; then
+          JAVA="build.gradle"
+        elif [ -f "build.gradle.kts" ]; then
+          JAVA="build.gradle.kts"
+        fi
+
+        if [ -n "$JAVA" ]; then
           TECHS="java,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="java"
-          fi
+          COUNT=$((COUNT + 1))
         fi
-        
-        # Check for Docker
-        if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
-          TECHS="docker,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="docker"
-          fi
+
+        # Ansible Collection detection. `ansible-galaxy collection init` does not emit
+        # a `type:` field, so its presence is the reliable signal; requiring that
+        # literal string missed every collection generated by the current CLI.
+        if [ -f "galaxy.yml" ]; then
+          ANSIBLE_COLLECTION="galaxy.yml"
+          TECHS="ansible-collection,${TECHS}"
+          COUNT=$((COUNT + 1))
         fi
-        
-        # Check for generic
-        if [ -f "Makefile" ] || [ -f "VERSION" ] || [ -f "version.txt" ]; then
+
+        # Container detection (Dockerfile or Containerfile)
+        if [ -f "Dockerfile" ]; then
+          CONTAINER="Dockerfile"
+        elif [ -f "Containerfile" ]; then
+          CONTAINER="Containerfile"
+        fi
+
+        if [ -n "$CONTAINER" ]; then
+          TECHS="container,${TECHS}"
+          COUNT=$((COUNT + 1))
+        fi
+
+        # Ansible Execution Environment detection
+        if [ -f "execution-environment.yml" ]; then
+          ANSIBLE_EE="execution-environment.yml"
+        elif [ -f "execution-environment.yaml" ]; then
+          ANSIBLE_EE="execution-environment.yaml"
+        fi
+
+        if [ -n "$ANSIBLE_EE" ]; then
+          TECHS="ansible-execution-environment,${TECHS}"
+          COUNT=$((COUNT + 1))
+        fi
+
+        # Helm detection - find Chart.yml anywhere in the repo
+        HELM=$(find . -name "Chart.yml" -type f 2>/dev/null | head -1 | sed 's|^\./||')
+
+        if [ -n "$HELM" ]; then
+          TECHS="helm,${TECHS}"
+          COUNT=$((COUNT + 1))
+        fi
+
+        # Node.js detection
+        if [ -f "package.json" ]; then
+          NODEJS="package.json"
+          TECHS="nodejs,${TECHS}"
+          COUNT=$((COUNT + 1))
+        fi
+
+        # Generic build detection
+        if [ -f "Makefile" ]; then
+          GENERIC="Makefile"
+        elif [ -f "VERSION" ]; then
+          GENERIC="VERSION"
+        elif [ -f "version.txt" ]; then
+          GENERIC="version.txt"
+        fi
+
+        if [ -n "$GENERIC" ]; then
           TECHS="generic,${TECHS}"
-          if [ -z "$PRIMARY" ]; then
-            PRIMARY="generic"
-          fi
+          COUNT=$((COUNT + 1))
         fi
-        
+
         # Remove trailing comma
         TECHS=$(echo "$TECHS" | sed 's/,$//')
-        
-        if [ -z "$TECHS" ]; then
-          echo "No recognized technology detected"
-          if [ "$FAIL_ON_MISSING" = "true" ]; then
-            exit 1
-          fi
-          PRIMARY="generic"
-          TECHS="generic"
+
+        if [ "$COUNT" -eq 0 ] && [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+          echo "No technologies detected"
+          exit 1
         fi
-        
+
+        # Primary technology, in the vocabulary run-tests consumes. Precedence
+        # mirrors what workflows-lib applied in its own local detector, and the
+        # ansible-collection/container values are mapped to the ansible/docker
+        # names that consumers already branch on.
+        PRIMARY=""
+        if [ -n "$ANSIBLE_COLLECTION" ]; then
+          PRIMARY="ansible"
+        elif [ -n "$PYTHON" ]; then
+          PRIMARY="python"
+        elif [ -n "$NODEJS" ]; then
+          PRIMARY="nodejs"
+        elif [ -n "$GO" ]; then
+          PRIMARY="go"
+        elif [ -n "$RUST" ]; then
+          PRIMARY="rust"
+        elif [ -n "$JAVA" ]; then
+          PRIMARY="java"
+        elif [ -n "$CONTAINER" ]; then
+          PRIMARY="docker"
+        else
+          PRIMARY="generic"
+        fi
+
+        # Set outputs
         echo "technologies=$TECHS" >> "$GITHUB_OUTPUT"
+        echo "count=$COUNT" >> "$GITHUB_OUTPUT"
         echo "primary=$PRIMARY" >> "$GITHUB_OUTPUT"
-        echo "Detected technologies: $TECHS"
+        echo "python=$PYTHON" >> "$GITHUB_OUTPUT"
+        echo "go=$GO" >> "$GITHUB_OUTPUT"
+        echo "rust=$RUST" >> "$GITHUB_OUTPUT"
+        echo "java=$JAVA" >> "$GITHUB_OUTPUT"
+        echo "nodejs=$NODEJS" >> "$GITHUB_OUTPUT"
+        echo "generic=$GENERIC" >> "$GITHUB_OUTPUT"
+        echo "ansible-collection=$ANSIBLE_COLLECTION" >> "$GITHUB_OUTPUT"
+        echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"
+        echo "ansible-execution-environment=$ANSIBLE_EE" >> "$GITHUB_OUTPUT"
+        echo "helm=$HELM" >> "$GITHUB_OUTPUT"
+
+        # Summary
+        echo "Detected $COUNT technology(ies): $TECHS"
         echo "Primary technology: $PRIMARY"
-    - name: Output results
-      shell: bash
-      run: |
-        echo "Detected technologies: ${{ steps.detect.outputs.technologies }}"
-        echo "Primary technology: ${{ steps.detect.outputs.primary }}"

@@ -1,0 +1,17 @@
+# Dependabot keeps the pinned action references used by the reusable workflows
+# and the composite actions in .github/actions current, including the
+# calavia-org self-references that must stay on a major-version tag.
+#
+# This repository publishes no package manifests, so github-actions is the only
+# ecosystem that applies here.
+
+version: 2
+updates:
+ - package-ecosystem: "github-actions"
+   directory: "/"
+   schedule:
+     interval: weekly
+   groups:
+     github-actions:
+       patterns:
+         - "*"

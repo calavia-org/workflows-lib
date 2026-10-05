@@ -67,7 +67,7 @@ on:
 
 jobs:
   pr-check-and-bump:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
     with:
       allowed-branch-pattern: ""
       allowed-target-branches: "main,release/*"
@@ -97,7 +97,7 @@ For the conventional commit detection to work reliably with squash merges:
 4. **Parse conventional commits** in PR commits or PR title
 5. **Derive base version** — from the highest release tag on the target branch
    (`base-version-source: tag`), or from `version-file` (`base-version-source: file`)
-6. **Bump version** using `bump-version-action`
+6. **Bump version** using `bump-version`
 7. **Commit and push** version bump to PR branch (if not already bumped)
 
 Prerelease tags are never used as a base, and a bump that does not move the
@@ -110,4 +110,4 @@ version forward is refused.
 
 ## Dependencies
 
-- [`calavia-org/bump-version-action`](https://github.com/calavia-org/bump-version-action) — Technology-agnostic version bumping
+- [`bump-version`](../.github/actions/bump-version) — Technology-agnostic version bumping
