@@ -56,4 +56,11 @@ repos:
         entry: python3 tests/version-authority.py
         language: system
         pass_filenames: false
-        files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^VERSION$|tests/version-authority\.py)$'
+        files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/pr-check-and-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
+
+      - id: bump-guard-state
+        name: verify the bump guard detects an applied bump from PR state, not the last commit message
+        entry: python3 tests/bump-guard-state.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-guard-state\.py)$'

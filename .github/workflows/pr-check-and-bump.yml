@@ -333,13 +333,59 @@ jobs:
             echo "Version bump detected"
           fi
 
-      - name: Check if last commit was already a version bump
+      # A bump is already applied when the version committed at the PR head differs
+      # from the version the base branch released. Comparing state, not the last
+      # commit message, is what keeps a review-fix push from bumping a second time:
+      # a message check resets on any follow-up commit and re-published 0.17.0.
+      - name: Check if this PR already has a version bump applied
         id: last_commit
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          VERSION_FILE: ${{ inputs.version-file }}
         run: |
-          LAST_COMMIT=$(git log -1 --pretty=%B)
-          if echo "$LAST_COMMIT" | grep -q "chore: bump version"; then
+          skip=false
+
+          # Read the version as committed at the PR head, not from the working
+          # tree: the bump action already rewrote the file in the previous step,
+          # so reading it from disk would always claim "already bumped" and no
+          # PR would ever be bumped.
+          head_version=""
+          if [ -n "$VERSION_FILE" ] && [ "$VERSION_FILE" != "auto" ]; then
+            head_version=$(git show "HEAD:$VERSION_FILE" 2>/dev/null \
+              | sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
+            if [ -z "$head_version" ]; then
+              head_version=$(git show "HEAD:$VERSION_FILE" 2>/dev/null \
+                | sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
+            fi
+          fi
+
+          # Same release-tag selection as the 'tag' source above: highest exact
+          # release tag reachable from the base branch, never git describe.
+          base_version=$(git tag --merged "origin/$BASE_BRANCH" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1 || true)
+          base_version="${base_version#v}"
+
+          if [ -n "$head_version" ] && [ -n "$base_version" ]; then
+            if [ "$head_version" != "$base_version" ]; then
+              echo "PR head already carries version $head_version, but $BASE_BRANCH has only released $base_version"
+              skip=true
+            else
+              echo "PR head is still at the released base version $base_version"
+            fi
+          else
+            # Unresolvable on either side (no release tag yet, or a custom
+            # layout): fall back to the commit-message heuristic rather than
+            # guessing, so this can never silently skip a needed bump.
+            echo "::warning::Could not compare the PR head version against a base release tag; falling back to the commit-message check"
+            if git log -1 --pretty=%B | grep -q "chore: bump version"; then
+              echo "Last commit was a version bump, skipping"
+              skip=true
+            fi
+          fi
+
+          if [ "$skip" = "true" ]; then
             echo "already_bumped=true" >> "$GITHUB_OUTPUT"
-            echo "Last commit was already a version bump, skipping"
           else
             echo "already_bumped=false" >> "$GITHUB_OUTPUT"
           fi
