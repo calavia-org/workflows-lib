@@ -97,7 +97,7 @@ For the conventional commit detection to work reliably with squash merges:
 4. **Parse conventional commits** in PR commits or PR title
 5. **Derive base version** — from the highest release tag on the target branch
    (`base-version-source: tag`), or from `version-file` (`base-version-source: file`)
-6. **Bump version** using `bump-version-action`
+6. **Bump version** using `bump-version`
 7. **Commit and push** version bump to PR branch (if not already bumped)
 
 Prerelease tags are never used as a base, and a bump that does not move the

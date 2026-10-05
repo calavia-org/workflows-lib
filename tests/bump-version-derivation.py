@@ -7,7 +7,7 @@ transcription of it.
 
 Regression guarded: `git describe --tags` returns the most RECENT tag by
 commit distance, so a prerelease tag (v0.0.0-pr.54) wins over a much higher
-release tag (v1.7.1). That made bump-version-action compute 0.0.1 and
+release tag (v1.7.1). That made bump-version compute 0.0.1 and
 silently roll a released collection back, e.g. on every push to a dependabot
 branch whose auto-bump re-derived the base version.
 
