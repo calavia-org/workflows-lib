@@ -24,6 +24,7 @@ runs:
     - name: Install Helm
       uses: azure/setup-helm@v4
     - name: Publish chart
+      id: push
       shell: bash
       run: |
         CHART="${{ inputs.chart-path }}"

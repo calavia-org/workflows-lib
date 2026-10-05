@@ -11,10 +11,6 @@ inputs:
     description: 'Cosign password'
     required: false
     default: ''
-outputs:
-  signature-path:
-    description: 'Path to signature file'
-    value: ${{ steps.sign.outputs.signature-path }}
 runs:
   using: composite
   steps:
