@@ -1,0 +1,40 @@
+name: Self-Validate
+
+# doc-refs.py asks git two questions per documented consumer reference: does the
+# ref name a published tag, and does the referenced path exist at that tag. Both
+# need tags in the clone, and actions/checkout defaults to fetch-depth 1, which
+# fetches only the tags pointing at the checked-out commit. That is why this
+# suite cannot be a pre-commit hook: those hooks also run on pre-commit.ci and in
+# developer shallow clones, where the suite would fail on a missing tag rather
+# than on a real documentation defect.
+#
+# Every other suite in tests/ is wired as a pre-commit hook and needs no workflow
+# at all, so this is the only job here that exists purely because a suite needs
+# history rather than because of what it asserts.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  doc-refs:
+    name: Documented references resolve to published tags
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify documented consumer references
+        run: python3 tests/doc-refs.py
