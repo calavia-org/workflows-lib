@@ -242,7 +242,7 @@ jobs:
       technologies: ${{ steps.detect.outputs.technologies }}
       primary: ${{ steps.detect.outputs.primary }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: $/.github/actions/detect-technology
@@ -257,7 +257,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-pre-commit }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup-pre-commit
@@ -285,7 +285,7 @@ jobs:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run unit tests
@@ -318,7 +318,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-build }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Setup environment
@@ -397,7 +397,7 @@ jobs:
           esac
       - name: Upload build artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-output
           path: |
@@ -423,7 +423,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ always() && inputs.run-package && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run package
@@ -495,7 +495,7 @@ jobs:
             esac
       - name: Upload package artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: package-output
           path: |
@@ -529,7 +529,7 @@ jobs:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run integration tests
@@ -578,7 +578,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Detect pre-release artifacts
@@ -587,7 +587,7 @@ jobs:
         with:
           pre-release-artifacts: ${{ inputs.pre-release-artifacts }}
       - name: Download build and package artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: '*-output'
           path: pre-release-artifacts
@@ -662,7 +662,7 @@ jobs:
       checks: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Publish reports

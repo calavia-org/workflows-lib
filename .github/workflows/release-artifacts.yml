@@ -245,7 +245,7 @@ jobs:
       artifacts: ${{ steps.artifacts.outputs.artifacts }}
       binary-type: ${{ steps.artifacts.outputs.binary-type }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: $/.github/actions/detect-version
@@ -264,7 +264,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     if: ${{ inputs.run-tests }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Validate test commands
         if: ${{ inputs.test-command == '' && inputs.integration-test-command == '' }}
         shell: bash
@@ -294,7 +294,7 @@ jobs:
       artifact-path: ${{ steps.build.outputs.artifact-path }}
       artifact-name: ${{ steps.build.outputs.artifact-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/build-binary
         id: build
         with:
@@ -318,7 +318,7 @@ jobs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/build-docker
         id: build
         with:
@@ -336,7 +336,7 @@ jobs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/build-ee
         id: build
         with:
@@ -355,7 +355,7 @@ jobs:
       chart-path: ${{ steps.build.outputs.chart-path }}
       chart-name: ${{ steps.build.outputs.chart-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/build-helm
         id: build
         with:
@@ -372,7 +372,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-binary
         with:
           artifact-path: ${{ needs.build-binary.outputs.artifact-path }}
@@ -386,7 +386,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-docker
         with:
           image-tag: ${{ needs.build-docker.outputs.image-tag || needs.build-ee.outputs.image-tag }}
@@ -399,7 +399,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-helm
         with:
           chart-path: ${{ needs.build-helm.outputs.chart-path }}
@@ -416,7 +416,7 @@ jobs:
       release-url: ${{ steps.publish.outputs.release-url }}
       release-id: ${{ steps.publish.outputs.release-id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/generate-release-notes
         id: notes
         with:
@@ -452,7 +452,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/publish-package
         with:
           package-manager: ${{ inputs.package-manager }}
@@ -468,7 +468,7 @@ jobs:
     timeout-minutes: 10
     if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: $/.github/actions/publish-helm
         with:
           chart-path: ${{ needs.build-helm.outputs.chart-path }}
