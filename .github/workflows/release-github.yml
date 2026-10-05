@@ -94,7 +94,7 @@ jobs:
       # Full history plus tag refs are required: the implementation annotates a tag
       # and force-moves the floating major tag, both of which need real refs.
       - name: Checkout release branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.github-token }}
