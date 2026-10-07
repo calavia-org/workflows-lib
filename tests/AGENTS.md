@@ -20,6 +20,7 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 
 ## CONVENTIONS
 
+- Every new piece of shipped code (workflow logic, action step, bump/release behavior) arrives with a new or extended invariant suite in the SAME commit, wired into `.pre-commit-config.yaml` — or into a CI workflow when the suite needs git history. Code without a self-PR-check suite does not merge; keep code minimal so the suite count stays minimal.
 - Run one suite: `python3 tests/<name>.py` (calls `git`/`bash` via `subprocess`).
 - All suites except `doc-refs.py` are wired as pre-commit local hooks (`language: system`, `pass_filenames: false`, `files:` regex scoped to the files each guards). `doc-refs.py` needs `fetch-depth: 0` tag history, so it is intentionally not a pre-commit hook — run it manually after `git fetch --tags`.
 - Test pattern: extract the shipped shell step out of the workflow YAML by step id, substitute `${{ ... }}` expressions with literals, run it via `bash -c` against a synthetic `GITHUB_OUTPUT` and/or a temp git repo. Helpers (`step_script_by_id`, `build_repo`) are inlined per file — there is no shared module by design; keep suites self-contained.

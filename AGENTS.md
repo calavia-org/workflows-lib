@@ -48,6 +48,7 @@ Most-referenced actions: `run-tests` (4 call sites), `detect-artifacts` (2), eve
 
 ## CONVENTIONS
 
+- MINIMIZE CODE in this repo: every line carries a test obligation. Code that is absolutely needed ships with its tests in the same change, and those tests run in this repo's own PR checks (pre-commit hooks via pre-commit.ci, or a CI workflow for suites needing git history) — untested code does not merge.
 - Consumers pin `@v0` (floating, dev) or `@vX.Y.Z` (reproducible); internal references use `$/` only.
 - `VERSION` is written only by `bump-version` (via `pr-check-and-bump.yml`); `release.yml` reads it and compares to the latest tag — idempotence comes from the file, not commit-type guessing.
 - Bump rules: `fix:` patch, `feat:` minor, `feat!:`/`BREAKING CHANGE:` major; `chore|docs|ci|test|refactor|perf|style/` branches check but skip the bump.
