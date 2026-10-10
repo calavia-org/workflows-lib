@@ -273,5 +273,8 @@ def main():
     return 0 if ok_all else 1
 
 
+def test_main():
+    assert main() == 0
+
 if __name__ == "__main__":
     sys.exit(main())
