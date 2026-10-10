@@ -64,3 +64,59 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-guard-state\.py)$'
+
+      - id: validate-branch
+        name: verify branch validation accepts allowed patterns and rejects invalid ones
+        entry: python3 tests/validate-branch.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/validate-branch/action\.yml|tests/validate-branch\.py)$'
+
+      - id: parse-conventional-commits
+        name: verify conventional commit parser derives the correct bump type
+        entry: python3 tests/parse-conventional-commits.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/parse-conventional-commits/action\.yml|tests/parse-conventional-commits\.py)$'
+
+      - id: resolve-base-version
+        name: verify base version resolution prefers files then highest release tag
+        entry: python3 tests/resolve-base-version.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/resolve-base-version/action\.yml|tests/resolve-base-version\.py)$'
+
+      - id: check-already-bumped
+        name: verify the already-bumped guard compares PR head to base release tag
+        entry: python3 tests/check-already-bumped.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/check-already-bumped/action\.yml|tests/check-already-bumped\.py)$'
+
+      - id: validate-action-structure
+        name: verify action.yml structure validation rejects invalid metadata
+        entry: python3 tests/validate-action-structure.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/validate-action-structure/action\.yml|tests/validate-action-structure\.py)$'
+
+      - id: install-actionlint
+        name: verify actionlint installer downloads the requested version
+        entry: python3 tests/install-actionlint.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/install-actionlint/action\.yml|tests/install-actionlint\.py)$'
+
+      - id: select-pre-release-artifacts
+        name: verify pre-release artifact selector only accepts binary artifacts
+        entry: python3 tests/select-pre-release-artifacts.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/select-pre-release-artifacts/action\.yml|\.github/workflows/pr-check-and-test\.yml|tests/select-pre-release-artifacts\.py)$'
+
+      - id: verify-required-tests-passed
+        name: verify the required-test gate cannot go green on a failing job
+        entry: python3 tests/verify-required-tests-passed.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/pr-check-and-test\.yml|tests/verify-required-tests-passed\.py)$'
