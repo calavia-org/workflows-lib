@@ -55,12 +55,13 @@ runs:
       if: steps.detect-config.outputs.config_found == 'true'
       uses: jdx/mise-action@v2
 
-    - name: Install pre-commit
+    - name: Install pre-commit and test dependencies
       if: steps.detect-config.outputs.config_found == 'true'
       shell: bash
       run: |
         mise exec -- pip install --upgrade pip
         mise exec -- pip install pre-commit
+        mise exec -- pip install -e ".[test]"
 
     - name: Run pre-commit
       if: steps.detect-config.outputs.config_found == 'true'
