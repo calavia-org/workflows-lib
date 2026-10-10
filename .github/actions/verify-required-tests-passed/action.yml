@@ -1,0 +1,85 @@
+name: Verify Required Tests Passed
+branding:
+  icon: check-square
+  color: blue
+description: |
+  Gate check that verifies all required PR jobs reached success (or a permitted
+  skipped state) before a merge can proceed.
+inputs:
+  unit-result:
+    description: 'Result of the unit test job'
+    required: false
+    default: 'success'
+  integration-result:
+    description: 'Result of the integration test job'
+    required: false
+    default: 'skipped'
+  build-result:
+    description: 'Result of the build job'
+    required: false
+    default: 'success'
+  package-result:
+    description: 'Result of the package job'
+    required: false
+    default: 'success'
+  pre-commit-result:
+    description: 'Result of the pre-commit job'
+    required: false
+    default: 'success'
+outputs:
+  passed:
+    description: 'true if all required jobs passed'
+    value: ${{ steps.verify.outputs.passed }}
+runs:
+  using: composite
+  steps:
+    - name: Verify required tests passed
+      id: verify
+      shell: bash
+      env:
+        UNIT_RESULT: ${{ inputs.unit-result }}
+        INTEGRATION_RESULT: ${{ inputs.integration-result }}
+        BUILD_RESULT: ${{ inputs.build-result }}
+        PACKAGE_RESULT: ${{ inputs.package-result }}
+        PRE_COMMIT_RESULT: ${{ inputs.pre-commit-result }}
+      run: |
+        echo "Unit: $UNIT_RESULT"
+        echo "Integration: $INTEGRATION_RESULT"
+        echo "Build: $BUILD_RESULT"
+        echo "Package: $PACKAGE_RESULT"
+        echo "Pre-Commit: $PRE_COMMIT_RESULT"
+
+        FAILED=0
+        if [ "$UNIT_RESULT" != "success" ]; then
+          echo "::error::Unit tests did not pass (result: $UNIT_RESULT)."
+          FAILED=1
+        fi
+
+        if [ "$INTEGRATION_RESULT" != "success" ] && [ "$INTEGRATION_RESULT" != "skipped" ]; then
+          echo "::error::Integration tests did not pass (result: $INTEGRATION_RESULT)."
+          FAILED=1
+        fi
+
+        if [ "$PACKAGE_RESULT" != "success" ] && [ "$PACKAGE_RESULT" != "skipped" ]; then
+          echo "::error::Packaging did not pass (result: $PACKAGE_RESULT)."
+          FAILED=1
+        fi
+
+        if [ "$BUILD_RESULT" != "success" ] && [ "$BUILD_RESULT" != "skipped" ]; then
+          echo "::error::Build did not pass (result: $BUILD_RESULT)."
+          FAILED=1
+        fi
+
+        if [ "$PRE_COMMIT_RESULT" != "success" ] && [ "$PRE_COMMIT_RESULT" != "skipped" ]; then
+          echo "::error::Pre-commit did not pass (result: $PRE_COMMIT_RESULT)."
+          FAILED=1
+        fi
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo ""
+          echo "::error::This check gates the merge, so it must not report success while its tests are failing or were cancelled."
+          exit 1
+        fi
+
+        echo "passed=true" >> "$GITHUB_OUTPUT"
+        echo "✅ Required tests passed."

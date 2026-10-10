@@ -1,0 +1,71 @@
+name: Select Pre-Release Artifacts
+branding:
+  icon: package
+  color: blue
+description: |
+  Validates the pre-release-artifacts selector produced by detect-artifacts and
+  resolves the actual file paths to attach to a GitHub pre-release.
+inputs:
+  selector:
+    description: 'Value from detect-artifacts.outputs.pre-release-artifacts'
+    required: true
+  artifacts-directory:
+    description: 'Directory containing downloaded artifacts'
+    required: false
+    default: 'pre-release-artifacts'
+outputs:
+  paths:
+    description: 'Newline-separated list of artifact file paths'
+    value: ${{ steps.select.outputs.paths }}
+runs:
+  using: composite
+  steps:
+    - name: Select pre-release artifacts
+      id: select
+      shell: bash
+      env:
+        SELECTED: ${{ inputs.selector }}
+        ARTIFACTS_DIR: ${{ inputs.artifacts-directory }}
+      run: |
+        echo "Resolved pre-release artifacts: $SELECTED"
+
+        if [ -z "$SELECTED" ]; then
+          echo "::error::detect-artifacts produced no pre-release-artifacts output."
+          echo "::error::prerelease-enabled is true, so a pre-release is expected and its absence"
+          echo "::error::is a failure, not something to skip. Check that workflows-lib is released"
+          echo "::error::so that @v0 includes the pre-release-artifacts output."
+          exit 1
+        fi
+
+        if [ "$SELECTED" = "auto" ]; then
+          echo "::error::detect-artifacts left pre-release-artifacts unresolved (auto)."
+          exit 1
+        fi
+
+        if [ "$SELECTED" != "binary" ]; then
+          echo "::error::'$SELECTED' is not produced by this workflow."
+          echo "::error::This workflow only runs the build and package steps, so 'binary' is the"
+          echo "::error::only selectable category. docker/execution-environment/helm artifacts are"
+          echo "::error::built by the release workflow, not the PR check."
+          exit 1
+        fi
+
+        if [ ! -d "$ARTIFACTS_DIR" ]; then
+          echo "::error::Artifacts directory not found: $ARTIFACTS_DIR"
+          exit 1
+        fi
+
+        FOUND=$(find "$ARTIFACTS_DIR" -type f | sort)
+        if [ -z "$FOUND" ]; then
+          echo "::error::Resolved 'binary' but no artifacts were downloaded"
+          exit 1
+        fi
+
+        echo "Artifacts to attach:"
+        awk '{print "  " $0}' <<< "$FOUND"
+
+        {
+          echo "paths<<EOF"
+          echo "$FOUND"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
