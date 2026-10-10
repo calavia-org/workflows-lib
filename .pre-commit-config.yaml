@@ -1,9 +1,5 @@
 ci:
   autoupdate_schedule: monthly
-  # pre-commit.ci blocks network downloads; the install-actionlint hook runs in the
-  # GitHub Actions pre-commit job instead. Remove this skip once the pre-commit.ci
-  # GitHub App is disabled for this repository.
-  skip: [install-actionlint]
 
 repos:
   - repo: https://github.com/rhysd/actionlint
