@@ -111,6 +111,13 @@ repos:
         pass_filenames: false
         files: '(\.github/actions/install-actionlint/action\.yml|tests/install-actionlint\.py)$'
 
+      - id: run-pre-commit
+        name: verify run-pre-commit uses mise and runs all hooks
+        entry: python3 tests/run-pre-commit.py
+        language: system
+        pass_filenames: false
+        files: '(mise\.toml|\.github/actions/run-pre-commit/action\.yml|tests/run-pre-commit\.py)$'
+
       - id: select-pre-release-artifacts
         name: verify pre-release artifact selector only accepts binary artifacts
         entry: python3 tests/select-pre-release-artifacts.py
