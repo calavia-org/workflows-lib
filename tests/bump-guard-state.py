@@ -19,8 +19,8 @@ import tempfile
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WF = ROOT / ".github/workflows/pr-check-and-bump.yml"
-GUARD_STEP_ID = "last_commit"
+ACTION = ROOT / ".github/actions/check-already-bumped/action.yml"
+CHECK_STEP_ID = "check"
 
 # The guard this file is written against, quoted so the suite documents the bug
 # rather than only the current behaviour.
@@ -35,13 +35,12 @@ fi
 
 
 def guard_script():
-    """Return the guard step's run script, verbatim."""
-    doc = yaml.safe_load(WF.read_text())
-    for job in (doc.get("jobs") or {}).values():
-        for step in job.get("steps") or []:
-            if step.get("id") == GUARD_STEP_ID:
-                return step["run"]
-    raise SystemExit(f"guard step id not found: {GUARD_STEP_ID}")
+    """Return the guard action's run script, verbatim."""
+    doc = yaml.safe_load(ACTION.read_text())
+    for step in doc.get("runs", {}).get("steps") or []:
+        if step.get("id") == CHECK_STEP_ID:
+            return step["run"]
+    raise SystemExit(f"guard step id not found: {CHECK_STEP_ID}")
 
 
 def _git(repo, *args):
@@ -85,7 +84,7 @@ def run_guard(script, repo, version_file="VERSION"):
         full = (
             f"export GITHUB_OUTPUT={env_out}\n"
             f"export BASE_BRANCH=main\n"
-            f"export VERSION_FILE={version_file}\n"
+            f"export VERSION_FILE_INPUT={version_file}\n"
             f"cd {repo}\n"
             + script
         )

@@ -1,6 +1,6 @@
 name: PR Check and Test
 
-on:
+'on':
   workflow_call:
     inputs:
       technology:

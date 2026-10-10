@@ -1,39 +1,42 @@
 name: PR Check and Auto-Bump
 
-on:
+'on':
   workflow_call:
     inputs:
       allowed-branch-pattern:
-        description: "Regex pattern for allowed branch names (optional, set empty to disable)"
+        description: Regex pattern for allowed branch names (optional, set empty to disable)
         type: string
-        default: "^(major|feat|fix|doc)/.+"
+        default: ^(major|feat|fix|doc)/.+
       allowed-target-branches:
-        description: "Comma-separated list of allowed target branch patterns"
+        description: Comma-separated list of allowed target branch patterns
         type: string
-        default: "main,release/*"
+        default: main,release/*
       version-file:
-        description: "Path to version file (auto-detected if not set)"
+        description: Path to version file (auto-detected if not set)
         type: string
-        default: "auto"
+        default: auto
       fail-on-invalid-branch:
-        description: "Fail workflow if branch name is invalid"
+        description: Fail workflow if branch name is invalid
         type: boolean
         default: false
       require-conventional-commits:
-        description: "Fail if no conventional commits found in PR"
+        description: Fail if no conventional commits found in PR
         type: boolean
         default: true
       no-bump-branch-pattern:
-        description: "Regex pattern for branches that should skip version bump (optional)"
+        description: Regex pattern for branches that should skip version bump (optional)
         type: string
-        default: ""
+        default: ''
       base-version-source:
-        description: "Where to read the base version for the bump: 'tag' (highest release tag on the base branch) or 'file' (the version file, i.e. the published source of truth). 'file' requires an explicit version-file."
+        description: |
+          Where to read the base version for the bump: 'tag' (highest release tag
+          on the base branch) or 'file' (the version file, i.e. the published
+          source of truth). 'file' requires an explicit version-file.
         type: string
-        default: "tag"
+        default: tag
     secrets:
       github-token:
-        description: "GitHub token with write permissions"
+        description: GitHub token with write permissions
         required: true
 
 jobs:
@@ -41,11 +44,11 @@ jobs:
     name: Check PR
     runs-on: ubuntu-24.04
     outputs:
-      bump_type: ${{ steps.conventional.outputs.bump_type }}
-      has_conventional: ${{ steps.conventional.outputs.has_conventional }}
-      branch_valid: ${{ steps.validate-branch.outputs.valid }}
-      target_valid: ${{ steps.validate-target.outputs.valid }}
-      should_bump: ${{ steps.check-no-bump.outputs.should_bump }}
+      bump_type: ${{ steps.parse.outputs.bump-type }}
+      has_conventional: ${{ steps.parse.outputs.has-conventional }}
+      branch_valid: ${{ steps.validate.outputs.branch-valid }}
+      target_valid: ${{ steps.validate.outputs.target-valid }}
+      should_bump: ${{ steps.validate.outputs.should-bump }}
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v7
@@ -53,149 +56,18 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Check no-bump branch pattern
-        id: check-no-bump
-        env:
-          BRANCH: ${{ github.head_ref }}
-          PATTERN: ${{ inputs.no-bump-branch-pattern }}
-        run: |
-          if [ -z "$PATTERN" ]; then
-            echo "should_bump=true" >> "$GITHUB_OUTPUT"
-            echo "No no-bump pattern set, allowing bump"
-            exit 0
-          fi
-
-          if echo "$BRANCH" | grep -qE "$PATTERN"; then
-            echo "should_bump=false" >> "$GITHUB_OUTPUT"
-            echo "⏭️ Branch '$BRANCH' matches no-bump pattern, skipping version bump"
-          else
-            echo "should_bump=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Branch '$BRANCH' does not match no-bump pattern, allowing bump"
-          fi
-
-      - name: Validate branch name
-        id: validate-branch
-        if: ${{ inputs.allowed-branch-pattern != '' }}
-        env:
-          BRANCH: ${{ github.head_ref }}
-          PATTERN: ${{ inputs.allowed-branch-pattern }}
-        run: |
-          if [ -z "$PATTERN" ]; then
-            echo "valid=true" >> "$GITHUB_OUTPUT"
-            echo "Branch name validation disabled"
-            exit 0
-          fi
-
-          if echo "$BRANCH" | grep -qE "$PATTERN"; then
-            echo "valid=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Branch name '$BRANCH' matches allowed pattern"
-          else
-            echo "valid=false" >> "$GITHUB_OUTPUT"
-            echo "❌ Branch name '$BRANCH' does NOT match pattern: $PATTERN"
-          fi
-
-      - name: Validate target branch
-        id: validate-target
-        env:
-          TARGET: ${{ github.base_ref }}
-          ALLOWED: ${{ inputs.allowed-target-branches }}
-        run: |
-          # Convert comma-separated list to regex pattern
-          PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
-
-          if echo "$TARGET" | grep -qE "^($PATTERN)$"; then
-            echo "valid=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Target branch '$TARGET' is allowed"
-          else
-            echo "valid=false" >> "$GITHUB_OUTPUT"
-            echo "❌ Target branch '$TARGET' is NOT in allowed list: $ALLOWED"
-          fi
-
-      - name: Parse conventional commits
-        id: conventional
-        env:
-          BASE_BRANCH: ${{ github.base_ref }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          # Get all commits in this PR
-          COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --pretty=format:"%s")
-          
-          echo "Commits in this PR:"
-          echo "$COMMITS"
-          echo ""
-          
-          BUMP_TYPE=""
-          HAS_CONVENTIONAL="false"
-          
-          while IFS= read -r commit; do
-            # Skip empty lines
-            [ -z "$commit" ] && continue
-            
-            # Check for breaking changes (highest priority)
-            if echo "$commit" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:|BREAKING-CHANGE:"; then
-              BUMP_TYPE="major"
-              HAS_CONVENTIONAL="true"
-              echo "Found breaking change in: $commit"
-              break  # Major is highest, no need to check further
-            fi
-            
-            # Check for features
-            if echo "$commit" | grep -qE "^feat(\(.+\))?:"; then
-              if [ "$BUMP_TYPE" != "major" ]; then
-                BUMP_TYPE="minor"
-              fi
-              HAS_CONVENTIONAL="true"
-              echo "Found feature in: $commit"
-            fi
-            
-            # Check for fixes
-            if echo "$commit" | grep -qE "^fix(\(.+\))?:"; then
-              if [ -z "$BUMP_TYPE" ]; then
-                BUMP_TYPE="patch"
-              fi
-              HAS_CONVENTIONAL="true"
-              echo "Found fix in: $commit"
-            fi
-            
-            # Check for other conventional types (chore, docs, refactor, etc.)
-            if echo "$commit" | grep -qE "^(chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
-              if [ -z "$BUMP_TYPE" ]; then
-                BUMP_TYPE="patch"
-              fi
-              HAS_CONVENTIONAL="true"
-              echo "Found conventional commit in: $commit"
-            fi
-          done <<< "$COMMITS"
-          
-          # If no conventional commits found, check PR title (for squash merges)
-          if [ "$HAS_CONVENTIONAL" = "false" ]; then
-            echo "No conventional commits found, checking PR title: $PR_TITLE"
-            
-            if echo "$PR_TITLE" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:"; then
-              BUMP_TYPE="major"
-              HAS_CONVENTIONAL="true"
-            elif echo "$PR_TITLE" | grep -qE "^feat(\(.+\))?:"; then
-              BUMP_TYPE="minor"
-              HAS_CONVENTIONAL="true"
-            elif echo "$PR_TITLE" | grep -qE "^(fix|chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
-              BUMP_TYPE="patch"
-              HAS_CONVENTIONAL="true"
-            fi
-          fi
-          
-          # Default to patch if nothing found and we don't require conventional
-          if [ -z "$BUMP_TYPE" ] && [ "${{ inputs.require-conventional-commits }}" = "false" ]; then
-            BUMP_TYPE="patch"
-            echo "No conventional commits found, defaulting to patch"
-          fi
-          
-          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
-          echo "has_conventional=$HAS_CONVENTIONAL" >> "$GITHUB_OUTPUT"
-          echo ""
-          echo "Result: bump_type=$BUMP_TYPE, has_conventional=$HAS_CONVENTIONAL"
+      - name: Validate branch
+        id: validate
+        uses: ./.github/actions/validate-branch
+        with:
+          branch: ${{ github.head_ref }}
+          allowed-branch-pattern: ${{ inputs.allowed-branch-pattern }}
+          target-branch: ${{ github.base_ref }}
+          allowed-target-branches: ${{ inputs.allowed-target-branches }}
+          no-bump-branch-pattern: ${{ inputs.no-bump-branch-pattern }}
 
       - name: Fail if branch name invalid
-        if: ${{ steps.validate-branch.outputs.valid == 'false' && inputs.fail-on-invalid-branch }}
+        if: ${{ steps.validate.outputs.branch-valid == 'false' && inputs.fail-on-invalid-branch }}
         env:
           BRANCH: ${{ github.head_ref }}
           PATTERN: ${{ inputs.allowed-branch-pattern }}
@@ -204,7 +76,7 @@ jobs:
           exit 1
 
       - name: Fail if target branch invalid
-        if: ${{ steps.validate-target.outputs.valid == 'false' }}
+        if: ${{ steps.validate.outputs.target-valid == 'false' }}
         env:
           TARGET: ${{ github.base_ref }}
           ALLOWED: ${{ inputs.allowed-target-branches }}
@@ -212,19 +84,13 @@ jobs:
           echo "Target branch $TARGET is not in allowed list: $ALLOWED"
           exit 1
 
-      - name: Fail if no conventional commits
-        if: ${{ steps.conventional.outputs.has_conventional == 'false' && inputs.require-conventional-commits }}
-        run: |
-          echo "❌ No conventional commits found in this PR"
-          echo ""
-          echo "Expected commit message format:"
-          echo "  fix: description       → patch bump"
-          echo "  feat: description      → minor bump"
-          echo "  feat!: description     → major bump"
-          echo "  BREAKING CHANGE: text  → major bump"
-          echo ""
-          echo "Since squash merge is enabled, ensure your PR title follows this format."
-          exit 1
+      - name: Parse conventional commits
+        id: parse
+        uses: ./.github/actions/parse-conventional-commits
+        with:
+          base-branch: ${{ github.base_ref }}
+          pr-title: ${{ github.event.pull_request.title }}
+          require-conventional-commits: ${{ inputs.require-conventional-commits }}
 
   auto-bump-version:
     name: Auto-Bump Version
@@ -258,151 +124,56 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           git fetch origin "$BASE_BRANCH" --tags
 
-      - name: Get base version for bump
-        id: current
-        env:
-          BASE_BRANCH: ${{ github.base_ref }}
-          BASE_VERSION_SOURCE: ${{ inputs.base-version-source }}
-          VERSION_FILE: ${{ inputs.version-file }}
-        run: |
-          if [ "$BASE_VERSION_SOURCE" = "file" ]; then
-            # The version file is what actually gets published, so it is the only
-            # base that cannot disagree with the artifact. Tags lag: a merged
-            # bump commits version-file=1.7.2 while the newest tag is still
-            # v1.7.1, so tag-derived bases recompute 1.7.1 -> 1.7.2 and produce
-            # an empty diff. Only an explicit path is accepted here because
-            # version-file=auto is resolved inside bump-version, not here.
-            if [ -z "$VERSION_FILE" ] || [ "$VERSION_FILE" = "auto" ]; then
-              echo "::error::base-version-source 'file' requires an explicit version-file"
-              exit 1
-            fi
-            if [ ! -f "$VERSION_FILE" ]; then
-              echo "::error::version file not found: $VERSION_FILE"
-              exit 1
-            fi
-            # bump-version has two writers, so two shapes must be readable. For `ansible` it
-            # rewrites the `version:` key; for `generic` — what a file named VERSION
-            # or version.txt resolves to — it writes a bare value via `echo > "$FILE"`.
-            # A keyed-only read made the base version unresolvable for exactly the
-            # files bump-version owns. Keyed is tried first so a galaxy.yml that also
-            # contains a bare-looking line cannot win over its real version key.
-            VERSION=$(sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$VERSION_FILE" | head -1)
-            if [ -z "$VERSION" ]; then
-              VERSION=$(sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$VERSION_FILE" | head -1)
-            fi
-            if [ -z "$VERSION" ]; then
-              echo "::error::no clean X.Y.Z version found in $VERSION_FILE"
-              exit 1
-            fi
-            echo "Base version read from $VERSION_FILE: $VERSION"
-          else
-            # Highest *release* tag reachable from the base branch. `git describe`
-            # is deliberately NOT used: it returns the most RECENT tag by commit
-            # distance, so a prerelease tag such as v0.0.0-pr.54 wins over v1.7.1
-            # even though it sorts far lower, making the bump roll the version back.
-            LATEST_TAG=$(git tag --merged "origin/$BASE_BRANCH" \
-              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-              | sort -V \
-              | tail -1 || true)
-            if [ -z "$LATEST_TAG" ]; then
-              echo "::warning::No release tag found on $BASE_BRANCH — defaulting base version to 0.0.0"
-              VERSION="0.0.0"
-            else
-              VERSION="${LATEST_TAG#v}"
-            fi
-            echo "Latest release tag on $BASE_BRANCH: ${LATEST_TAG:-<none>} → base version: $VERSION"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Resolve base version
+        id: base
+        uses: ./.github/actions/resolve-base-version
+        with:
+          version-file-source: ${{ inputs.base-version-source == 'file' && inputs.version-file || inputs.base-version-source }}
+          base-branch: ${{ github.base_ref }}
 
       - name: Bump version using custom action
         id: bump
-        uses: $/.github/actions/bump-version
+        uses: ./.github/actions/bump-version
         with:
-          version-file: ${{ inputs.version-file }}
           bump-type: ${{ needs.check-pr.outputs.bump_type }}
-          current-version: ${{ steps.current.outputs.version }}
+          current-version: ${{ steps.base.outputs.version }}
+          version-file: ${{ inputs.version-file }}
 
       - name: Check if changes exist
-        id: check
+        id: changes
         run: |
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No changes to commit"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Version bump detected"
+            echo "Version file changed"
           fi
 
-      # A bump is already applied when the version committed at the PR head differs
-      # from the version the base branch released. Comparing state, not the last
-      # commit message, is what keeps a review-fix push from bumping a second time:
-      # a message check resets on any follow-up commit and re-published 0.17.0.
-      - name: Check if this PR already has a version bump applied
+      - name: Check if already bumped
         id: last_commit
-        env:
-          BASE_BRANCH: ${{ github.base_ref }}
-          VERSION_FILE: ${{ inputs.version-file }}
-        run: |
-          skip=false
-
-          # Read the version as committed at the PR head, not from the working
-          # tree: the bump action already rewrote the file in the previous step,
-          # so reading it from disk would always claim "already bumped" and no
-          # PR would ever be bumped.
-          head_version=""
-          if [ -n "$VERSION_FILE" ] && [ "$VERSION_FILE" != "auto" ]; then
-            head_version=$(git show "HEAD:$VERSION_FILE" 2>/dev/null \
-              | sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
-            if [ -z "$head_version" ]; then
-              head_version=$(git show "HEAD:$VERSION_FILE" 2>/dev/null \
-                | sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
-            fi
-          fi
-
-          # Same release-tag selection as the 'tag' source above: highest exact
-          # release tag reachable from the base branch, never git describe.
-          base_version=$(git tag --merged "origin/$BASE_BRANCH" \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V | tail -1 || true)
-          base_version="${base_version#v}"
-
-          if [ -n "$head_version" ] && [ -n "$base_version" ]; then
-            if [ "$head_version" != "$base_version" ]; then
-              echo "PR head already carries version $head_version, but $BASE_BRANCH has only released $base_version"
-              skip=true
-            else
-              echo "PR head is still at the released base version $base_version"
-            fi
-          else
-            # Unresolvable on either side (no release tag yet, or a custom
-            # layout): fall back to the commit-message heuristic rather than
-            # guessing, so this can never silently skip a needed bump.
-            echo "::warning::Could not compare the PR head version against a base release tag; falling back to the commit-message check"
-            if git log -1 --pretty=%B | grep -q "chore: bump version"; then
-              echo "Last commit was a version bump, skipping"
-              skip=true
-            fi
-          fi
-
-          if [ "$skip" = "true" ]; then
-            echo "already_bumped=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "already_bumped=false" >> "$GITHUB_OUTPUT"
-          fi
+        if: ${{ steps.changes.outputs.changed == 'true' }}
+        uses: ./.github/actions/check-already-bumped
+        with:
+          version-file: ${{ steps.bump.outputs.version-file }}
+          base-branch: ${{ github.base_ref }}
 
       - name: Commit and push version bump
-        if: steps.check.outputs.changed == 'true' && steps.last_commit.outputs.already_bumped == 'false'
+        if: |
+          steps.changes.outputs.changed == 'true' &&
+          steps.last_commit.outputs.already-bumped != 'true'
         env:
           BRANCH: ${{ github.head_ref }}
-          BASE_VERSION: ${{ steps.current.outputs.version }}
+          TYPE: ${{ needs.check-pr.outputs.bump_type }}
+          BASE_VERSION: ${{ steps.base.outputs.version }}
           NEW_VERSION: ${{ steps.bump.outputs.new-version }}
         run: |
           FILE="${{ steps.bump.outputs.version-file }}"
-          TYPE="${{ needs.check-pr.outputs.bump_type }}"
 
           # Fail safe: a bump must only ever move the version FORWARD, and only
           # from a clean release base. A prerelease base (e.g. 0.0.0-pr.54) means
-          # the tag lookup went wrong; abort rather than roll an artifact back.
+          # the base version resolution could not find a real release, so refuse
+          # rather than risk an unintended jump or rollback.
           if ! printf '%s' "$BASE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::Refusing to bump: base version '$BASE_VERSION' is not a clean release version"
             echo "::error::The release-tag lookup returned a prerelease; abort rather than roll a released artifact back."

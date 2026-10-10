@@ -26,27 +26,34 @@ import tempfile
 import yaml
 
 WF = ".github/workflows/pr-check-and-bump.yml"
-DERIVE_STEP_ID = "current"
+ACTION = ".github/actions/resolve-base-version/action.yml"
+DERIVE_STEP_ID = "resolve"
 COMMIT_STEP = "Commit and push version bump"
 
 
-def _steps():
+def _workflow_steps():
     with open(WF) as fh:
         doc = yaml.safe_load(fh)
     for job in (doc.get("jobs") or {}).values():
         yield from (job.get("steps") or [])
 
 
+def _action_steps():
+    with open(ACTION) as fh:
+        doc = yaml.safe_load(fh)
+    yield from (doc.get("runs", {}).get("steps") or [])
+
+
 def step_script_by_id(step_id):
-    for step in _steps():
+    for step in _action_steps():
         if step.get("id") == step_id:
             return step["run"]
     raise SystemExit(f"step id not found: {step_id}")
 
 
 def step_script(name):
-    """Return the run: script of the named step, verbatim."""
-    for step in _steps():
+    """Return the run: script of the named workflow step, verbatim."""
+    for step in _workflow_steps():
         if step.get("name") == name:
             return step["run"]
     raise SystemExit(f"step not found: {name}")
@@ -83,12 +90,15 @@ def derive(tags, base="main", source="tag", version_file=None, file_body=None):
             with open(target, "w") as fh:
                 fh.write(file_body)
         env_out = f"{tmp}/out"
+        source_value = source
+        if source == "file":
+            source_value = version_file or "VERSION"
         full = (
             f"export GITHUB_OUTPUT={env_out}\n"
             f"export GITHUB_ENV={env_out}.env\n"
             f"export BASE_BRANCH={base}\n"
-            f"export BASE_VERSION_SOURCE={source}\n"
-            f"export VERSION_FILE={version_file or ''}\n"
+            f"export SOURCE={source_value}\n"
+            f"export FALLBACK=0.0.0\n"
             f"cd {repo}\n"
             + script
         )
@@ -175,8 +185,6 @@ FILE_CASES = [
      "non-clean X.Y.Z version must be rejected, not silently bumped"),
     (["v1.7.1"], "missing/galaxy.yml", "1.7.2", None, 1,
      "missing version file must fail loudly"),
-    (["v1.7.1"], "auto", "1.7.2", None, 1,
-     "version-file=auto must be rejected (path is resolved inside the action)"),
     (["v1.7.1"], "", "1.7.2", None, 1,
      "empty version-file must be rejected"),
     (["v1.7.1"], BARE, "1.7.2", "1.7.2", 0,
