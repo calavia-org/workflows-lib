@@ -1,0 +1,113 @@
+name: Resolve Base Version
+branding:
+  icon: tag
+  color: blue
+description: |
+  Resolves the base version for a semantic-version bump from either a version
+  file or the highest release tag reachable from a base branch.
+inputs:
+  version-file-source:
+    description: |
+      Source for the base version: 'auto' tries common version files then tags,
+      'tags' always uses release tags, or an explicit file path.
+    required: false
+    default: 'auto'
+  base-branch:
+    description: 'Base branch used when resolving from tags'
+    required: true
+  fallback-version:
+    description: 'Version to use when no file or tag can be resolved'
+    required: false
+    default: '0.0.0'
+outputs:
+  version:
+    description: 'Resolved X.Y.Z base version'
+    value: ${{ steps.resolve.outputs.version }}
+  source:
+    description: 'Source of the resolved version: file or tags'
+    value: ${{ steps.resolve.outputs.source }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve base version
+      id: resolve
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.version-file-source }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        FALLBACK: ${{ inputs.fallback-version }}
+      run: |
+        resolve_from_file() {
+          local FILE="$1"
+          local VALUE=""
+
+          VALUE=$(sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$FILE" | head -1)
+          if [ -z "$VALUE" ]; then
+            VALUE=$(sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" "$FILE" | head -1)
+          fi
+          echo "$VALUE"
+        }
+
+        resolve_from_tags() {
+          local BASE="$1"
+          local TAG
+          local REF
+          if git rev-parse --verify "origin/$BASE" >/dev/null 2>&1; then
+            REF="origin/$BASE"
+          else
+            REF="$BASE"
+          fi
+          TAG=$(git tag --merged "$REF" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1 || true)
+          if [ -n "$TAG" ]; then
+            echo "${TAG#v}"
+          fi
+        }
+
+        VERSION=""
+        SOURCE_INPUT="$SOURCE"
+        SOURCE="tags"
+
+        if [ "$SOURCE_INPUT" != "tags" ] && [ "$SOURCE_INPUT" != "tag" ]; then
+          if [ "$SOURCE_INPUT" = "auto" ]; then
+            for CANDIDATE in VERSION version.txt package.json pyproject.toml setup.py Cargo.toml galaxy.yml; do
+              if [ -f "$CANDIDATE" ]; then
+                FILE="$CANDIDATE"
+                break
+              fi
+            done
+          else
+            FILE="$SOURCE_INPUT"
+          fi
+
+          if [ -n "${FILE:-}" ]; then
+            if [ ! -f "$FILE" ]; then
+              echo "::error::version file not found: $FILE"
+              exit 1
+            fi
+            VERSION=$(resolve_from_file "$FILE")
+            if [ -n "$VERSION" ]; then
+              SOURCE="file"
+              echo "Base version read from $FILE: $VERSION"
+            elif [ "$SOURCE_INPUT" != "auto" ]; then
+              echo "::error::no clean X.Y.Z version found in $FILE"
+              exit 1
+            fi
+          fi
+        fi
+
+        if [ -z "$VERSION" ]; then
+          SOURCE="tags"
+          VERSION=$(resolve_from_tags "$BASE_BRANCH")
+          if [ -z "$VERSION" ]; then
+            echo "::warning::No release tag found on $BASE_BRANCH — defaulting base version to $FALLBACK"
+            VERSION="$FALLBACK"
+          else
+            echo "Latest release tag on $BASE_BRANCH → base version: $VERSION"
+          fi
+        fi
+
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
