@@ -1,6 +1,6 @@
 name: PR Check GitHub Action
 
-on:
+'on':
   workflow_call:
     inputs:
       runner-label:
@@ -40,15 +40,15 @@ jobs:
         shell: bash
         run: |
           ACTION_FILE=""
-          
+
           if [ -f "action.yml" ]; then
             ACTION_FILE="action.yml"
           elif [ -f "action.yaml" ]; then
             ACTION_FILE="action.yaml"
           fi
-          
+
           echo "action-file=$ACTION_FILE" >> "$GITHUB_OUTPUT"
-          
+
           if [ -n "$ACTION_FILE" ]; then
             echo "Action file detected: $ACTION_FILE"
           else
@@ -66,51 +66,9 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Validate action.yml structure
-        shell: bash
-        run: |
-          ACTION_FILE="${{ needs.detect.outputs.action-file }}"
-          
-          echo "Validating $ACTION_FILE structure..."
-          
-          ERRORS=0
-          
-          if ! grep -q "^name:" "$ACTION_FILE"; then
-            echo "ERROR: Missing 'name' field"
-            ERRORS=$((ERRORS + 1))
-          fi
-          
-          if ! grep -q "^description:" "$ACTION_FILE"; then
-            echo "ERROR: Missing 'description' field"
-            ERRORS=$((ERRORS + 1))
-          fi
-          
-          if ! grep -q "^runs:" "$ACTION_FILE"; then
-            echo "ERROR: Missing 'runs' section"
-            ERRORS=$((ERRORS + 1))
-          else
-            if ! grep -A 5 "^runs:" "$ACTION_FILE" | grep -q "using:"; then
-              echo "ERROR: Missing 'using' field in runs section"
-              ERRORS=$((ERRORS + 1))
-            else
-              USING=$(grep -A 5 "^runs:" "$ACTION_FILE" | grep "using:" | sed 's/.*using: //' | tr -d ' "')
-              case "$USING" in
-                composite|node12|node16|node20|node24|docker)
-                  echo "Valid using: $USING"
-                  ;;
-                *)
-                  echo "ERROR: Invalid 'using' value: $USING"
-                  ERRORS=$((ERRORS + 1))
-                  ;;
-              esac
-            fi
-          fi
-          
-          if [ $ERRORS -gt 0 ]; then
-            echo "Validation failed with $ERRORS error(s)"
-            exit 1
-          fi
-          
-          echo "Action structure is valid"
+        uses: ./.github/actions/validate-action-structure
+        with:
+          action-file: ${{ needs.detect.outputs.action-file }}
 
   lint:
     name: Lint Workflows
@@ -122,30 +80,20 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install actionlint
-        shell: bash
-        run: |
-          ARCH=$(uname -m)
-          case "$ARCH" in
-            x86_64) ARCH="amd64" ;;
-            aarch64|arm64) ARCH="arm64" ;;
-          esac
-          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-          VERSION=$(curl -sL "https://api.github.com/repos/rhysd/actionlint/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
-          curl -sL "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_${OS}_${ARCH}.tar.gz" | tar xz
-          sudo mv actionlint /usr/local/bin/
-          echo "actionlint installed"
+        id: actionlint
+        uses: ./.github/actions/install-actionlint
 
       - name: Run actionlint
         shell: bash
         run: |
           echo "Running actionlint on workflow files..."
-          
+
           if [ -d ".github/workflows" ]; then
-            actionlint .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true
+            "${{ steps.actionlint.outputs.actionlint-path }}" .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true
           else
             echo "No .github/workflows directory found, skipping"
           fi
-          
+
           echo "Linting complete"
 
   test:
@@ -162,15 +110,15 @@ jobs:
         shell: bash
         run: |
           ACTION_FILE="${{ needs.detect.outputs.action-file }}"
-          
+
           echo "Testing action reference..."
-          
+
           ACTION_NAME=$(grep "^name:" "$ACTION_FILE" | head -1 | sed 's/name: //' | tr -d ' "')
           echo "Action name: $ACTION_NAME"
-          
+
           if [ -f "$ACTION_FILE" ]; then
             echo "Action file exists and is valid YAML"
-            
+
             python3 -c "
           import yaml
           with open('$ACTION_FILE') as f:
@@ -181,5 +129,5 @@ jobs:
               print(f\"Runs: {data.get('runs', {}).get('using', 'N/A')}\")
           " 2>/dev/null || echo "Python YAML validation skipped"
           fi
-          
+
           echo "Action reference test complete"

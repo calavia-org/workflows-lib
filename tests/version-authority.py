@@ -36,12 +36,14 @@ BUMP_ACTION = ROOT / ".github" / "actions" / "bump-version" / "action.yml"
 def _reader_script() -> str | None:
     """The verbatim shell that resolves the base version from the version file.
 
-    Taken through yaml.safe_load so the text is the same string GitHub runs,
-    not a reconstruction of it.
+    The base-version reader has been extracted into the resolve-base-version
+    composite action; this helper reads the action's implementation so the test
+    continues to pin the same contract.
     """
-    doc = yaml.safe_load(BUMP_CONTRACT.read_text())
-    for step in doc["jobs"]["auto-bump-version"]["steps"]:
-        if step.get("name") == "Get base version for bump":
+    action_file = ROOT / ".github" / "actions" / "resolve-base-version" / "action.yml"
+    doc = yaml.safe_load(action_file.read_text())
+    for step in doc["runs"]["steps"]:
+        if step.get("id") == "resolve":
             return step["run"]
     return None
 
@@ -59,9 +61,9 @@ def _resolve(script: str, content: str) -> tuple[int, str | None]:
             ["bash", "-e", "-c", script],
             env={
                 **os.environ,
-                "BASE_VERSION_SOURCE": "file",
-                "VERSION_FILE": str(version_file),
+                "SOURCE": str(version_file),
                 "BASE_BRANCH": "main",
+                "FALLBACK": "0.0.0",
                 "GITHUB_OUTPUT": str(output),
             },
             capture_output=True,
@@ -260,7 +262,7 @@ def main() -> int:
     check("bump-version has one update step", len(update_steps) == 1, f"found {len(update_steps)}")
 
     script = _reader_script()
-    check("base-version reader step exists", script is not None)
+    check("base-version reader action step exists", script is not None)
 
     if update_steps and script:
         writer = update_steps[0]["run"]

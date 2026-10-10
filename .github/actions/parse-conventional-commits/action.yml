@@ -1,0 +1,121 @@
+name: Parse Conventional Commits
+branding:
+  icon: git-commit
+  color: blue
+description: |
+  Parses conventional commits in a PR branch and derives the semantic-version
+  bump type. Falls back to the PR title when the branch has no commits.
+inputs:
+  base-branch:
+    description: 'Base branch to diff against (e.g. github.base_ref)'
+    required: true
+  pr-title:
+    description: 'PR title used as fallback when no conventional commits are found'
+    required: false
+    default: ''
+  require-conventional-commits:
+    description: 'Fail if no conventional commits are found'
+    required: false
+    default: 'false'
+  default-bump-type:
+    description: 'Default bump type when no conventional commits are found and they are not required'
+    required: false
+    default: 'patch'
+outputs:
+  bump-type:
+    description: 'Derived bump type: major, minor, patch, or none'
+    value: ${{ steps.parse.outputs.bump_type }}
+  has-conventional:
+    description: 'true if at least one conventional commit or a conventional PR title was found'
+    value: ${{ steps.parse.outputs.has_conventional }}
+  breaking:
+    description: 'true if a breaking change was detected'
+    value: ${{ steps.parse.outputs.breaking }}
+runs:
+  using: composite
+  steps:
+    - name: Parse conventional commits
+      id: parse
+      shell: bash
+      env:
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        REQUIRE_CONVENTIONAL: ${{ inputs.require-conventional-commits }}
+        DEFAULT_BUMP: ${{ inputs.default-bump-type }}
+      run: |
+        if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+          COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --pretty=format:"%s" 2>/dev/null || true)
+        else
+          COMMITS=$(git log "$BASE_BRANCH..HEAD" --pretty=format:"%s" 2>/dev/null || true)
+        fi
+
+        echo "Commits in this PR:"
+        echo "$COMMITS"
+        echo ""
+
+        BUMP_TYPE=""
+        HAS_CONVENTIONAL="false"
+        BREAKING="false"
+
+        while IFS= read -r commit; do
+          [ -z "$commit" ] && continue
+
+          if echo "$commit" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:|BREAKING-CHANGE:"; then
+            BUMP_TYPE="major"
+            HAS_CONVENTIONAL="true"
+            BREAKING="true"
+            echo "Found breaking change in: $commit"
+            break
+          fi
+
+          if echo "$commit" | grep -qE "^feat(\(.+\))?:"; then
+            if [ "$BUMP_TYPE" != "major" ]; then
+              BUMP_TYPE="minor"
+            fi
+            HAS_CONVENTIONAL="true"
+            echo "Found feature in: $commit"
+          fi
+
+          if echo "$commit" | grep -qE "^fix(\(.+\))?:"; then
+            if [ -z "$BUMP_TYPE" ]; then
+              BUMP_TYPE="patch"
+            fi
+            HAS_CONVENTIONAL="true"
+            echo "Found fix in: $commit"
+          fi
+
+          if echo "$commit" | grep -qE "^(chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
+            if [ -z "$BUMP_TYPE" ]; then
+              BUMP_TYPE="patch"
+            fi
+            HAS_CONVENTIONAL="true"
+            echo "Found conventional commit in: $commit"
+          fi
+        done <<< "$COMMITS"
+
+        if [ "$HAS_CONVENTIONAL" = "false" ] && [ -n "$PR_TITLE" ]; then
+          echo "No conventional commits found, checking PR title: $PR_TITLE"
+
+          if echo "$PR_TITLE" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE:"; then
+            BUMP_TYPE="major"
+            HAS_CONVENTIONAL="true"
+            BREAKING="true"
+          elif echo "$PR_TITLE" | grep -qE "^feat(\(.+\))?:"; then
+            BUMP_TYPE="minor"
+            HAS_CONVENTIONAL="true"
+          elif echo "$PR_TITLE" | grep -qE "^(fix|chore|docs|style|refactor|perf|test|ci|build)(\(.+\))?:"; then
+            BUMP_TYPE="patch"
+            HAS_CONVENTIONAL="true"
+          fi
+        fi
+
+        if [ -z "$BUMP_TYPE" ] && [ "$REQUIRE_CONVENTIONAL" = "false" ]; then
+          BUMP_TYPE="$DEFAULT_BUMP"
+          echo "No conventional commits found, defaulting to $DEFAULT_BUMP"
+        fi
+
+        echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+        echo "has_conventional=$HAS_CONVENTIONAL" >> "$GITHUB_OUTPUT"
+        echo "breaking=$BREAKING" >> "$GITHUB_OUTPUT"
+        echo ""
+        echo "Result: bump_type=$BUMP_TYPE, has_conventional=$HAS_CONVENTIONAL, breaking=$BREAKING"

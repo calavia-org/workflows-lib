@@ -1,0 +1,73 @@
+name: Validate Action Structure
+branding:
+  icon: shield
+  color: blue
+description: |
+  Validates the structure of a GitHub composite action.yml file. Checks that the
+  file exists, parses as YAML, and contains the required metadata fields.
+inputs:
+  action-file:
+    description: 'Path to the action.yml file to validate'
+    required: true
+  require-composite:
+    description: 'Require runs.using to be composite'
+    required: false
+    default: 'true'
+outputs:
+  valid:
+    description: 'true if the action file passes validation'
+    value: ${{ steps.validate.outputs.valid }}
+  name:
+    description: 'Action name from metadata'
+    value: ${{ steps.validate.outputs.name }}
+  using:
+    description: 'Value of runs.using'
+    value: ${{ steps.validate.outputs.using }}
+runs:
+  using: composite
+  steps:
+    - name: Validate action.yml structure
+      id: validate
+      shell: bash
+      env:
+        ACTION_FILE: ${{ inputs.action-file }}
+        REQUIRE_COMPOSITE: ${{ inputs.require-composite }}
+      run: |
+        if [ ! -f "$ACTION_FILE" ]; then
+          echo "::error::action file not found: $ACTION_FILE"
+          exit 1
+        fi
+
+        if ! python3 -c "import yaml; yaml.safe_load(open('$ACTION_FILE'))" 2>/dev/null; then
+          echo "::error::action file is not valid YAML: $ACTION_FILE"
+          exit 1
+        fi
+
+        NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('$ACTION_FILE')).get('name',''))" 2>/dev/null)
+        DESC=$(python3 -c "import yaml; print(yaml.safe_load(open('$ACTION_FILE')).get('description',''))" 2>/dev/null)
+        USING=$(python3 -c "import yaml; d=yaml.safe_load(open('$ACTION_FILE')); print(d.get('runs',{}).get('using',''))" 2>/dev/null)
+
+        if [ -z "$NAME" ]; then
+          echo "::error::action file missing required field 'name': $ACTION_FILE"
+          exit 1
+        fi
+
+        if [ -z "$DESC" ]; then
+          echo "::error::action file missing required field 'description': $ACTION_FILE"
+          exit 1
+        fi
+
+        if [ -z "$USING" ]; then
+          echo "::error::action file missing required field 'runs.using': $ACTION_FILE"
+          exit 1
+        fi
+
+        if [ "$REQUIRE_COMPOSITE" = "true" ] && [ "$USING" != "composite" ]; then
+          echo "::error::action file must use composite runs, found '$USING': $ACTION_FILE"
+          exit 1
+        fi
+
+        echo "valid=true" >> "$GITHUB_OUTPUT"
+        echo "name=$NAME" >> "$GITHUB_OUTPUT"
+        echo "using=$USING" >> "$GITHUB_OUTPUT"
+        echo "✅ Action structure valid: $ACTION_FILE"

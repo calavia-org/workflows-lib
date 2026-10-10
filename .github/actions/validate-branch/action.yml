@@ -1,0 +1,107 @@
+name: Validate Branch
+branding:
+  icon: git-branch
+  color: blue
+description: |
+  Validates a PR branch name and target branch against allowed patterns, and
+  decides whether the branch should trigger a version bump.
+inputs:
+  branch:
+    description: 'PR branch name to validate (e.g. github.head_ref)'
+    required: true
+  allowed-branch-pattern:
+    description: 'Regex pattern for allowed branch names; empty disables validation'
+    required: false
+    default: ''
+  target-branch:
+    description: 'Target branch name (e.g. github.base_ref)'
+    required: true
+  allowed-target-branches:
+    description: 'Comma-separated list of allowed target branch patterns'
+    required: false
+    default: 'main,release/*'
+  no-bump-branch-pattern:
+    description: 'Regex pattern for branches that should skip version bump; empty means no skip'
+    required: false
+    default: ''
+outputs:
+  branch-valid:
+    description: 'true if the branch name is valid or validation is disabled'
+    value: ${{ steps.validate-branch.outputs.valid }}
+  target-valid:
+    description: 'true if the target branch is allowed'
+    value: ${{ steps.validate-target.outputs.valid }}
+  should-bump:
+    description: 'true if the branch does not match the no-bump pattern'
+    value: ${{ steps.check-no-bump.outputs.should_bump }}
+runs:
+  using: composite
+  steps:
+    - name: Check no-bump branch pattern
+      id: check-no-bump
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.branch }}
+        PATTERN: ${{ inputs.no-bump-branch-pattern }}
+      run: |
+        if [ -z "$PATTERN" ]; then
+          echo "should_bump=true" >> "$GITHUB_OUTPUT"
+          echo "No no-bump pattern set, allowing bump"
+          exit 0
+        fi
+
+        if echo "$BRANCH" | grep -qE "$PATTERN"; then
+          echo "should_bump=false" >> "$GITHUB_OUTPUT"
+          echo "⏭️ Branch '$BRANCH' matches no-bump pattern, skipping version bump"
+        else
+          echo "should_bump=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Branch '$BRANCH' does not match no-bump pattern, allowing bump"
+        fi
+
+    - name: Validate branch name
+      id: validate-branch
+      if: ${{ inputs.allowed-branch-pattern != '' }}
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.branch }}
+        PATTERN: ${{ inputs.allowed-branch-pattern }}
+      run: |
+        if [ -z "$PATTERN" ]; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "Branch name validation disabled"
+          exit 0
+        fi
+
+        if echo "$BRANCH" | grep -qE "$PATTERN"; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Branch name '$BRANCH' matches allowed pattern"
+        else
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          echo "❌ Branch name '$BRANCH' does NOT match pattern: $PATTERN"
+        fi
+
+    - name: Validate branch name (disabled)
+      id: validate-branch-disabled
+      if: ${{ inputs.allowed-branch-pattern == '' }}
+      shell: bash
+      run: |
+        echo "valid=true" >> "$GITHUB_OUTPUT"
+        echo "Branch name validation disabled"
+
+    - name: Validate target branch
+      id: validate-target
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target-branch }}
+        ALLOWED: ${{ inputs.allowed-target-branches }}
+      run: |
+        # Convert comma-separated list to regex pattern
+        PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
+
+        if echo "$TARGET" | grep -qE "^($PATTERN)$"; then
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Target branch '$TARGET' is allowed"
+        else
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          echo "❌ Target branch '$TARGET' is NOT in allowed list: $ALLOWED"
+        fi

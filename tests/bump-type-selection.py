@@ -43,18 +43,17 @@ import tempfile
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WF = ROOT / ".github/workflows/pr-check-and-bump.yml"
-BUMP_STEP_ID = "conventional"
+ACTION = ROOT / ".github/actions/parse-conventional-commits/action.yml"
+BUMP_STEP_ID = "parse"
 
 
 def step_script_by_id(step_id: str) -> str:
-    """Return the `run:` script of the step with this id, verbatim."""
-    doc = yaml.safe_load(WF.read_text(encoding="utf-8"))
-    for job in (doc.get("jobs") or {}).values():
-        for step in job.get("steps") or []:
-            if step.get("id") == step_id:
-                return step["run"]
-    raise SystemExit(f"error: step id not found in {WF.name}: {step_id}")
+    """Return the `run:` script of the action step with this id, verbatim."""
+    doc = yaml.safe_load(ACTION.read_text(encoding="utf-8"))
+    for step in doc.get("runs", {}).get("steps") or []:
+        if step.get("id") == step_id:
+            return step["run"]
+    raise SystemExit(f"error: step id not found in {ACTION.name}: {step_id}")
 
 
 def select_bump(
@@ -69,24 +68,24 @@ def select_bump(
     """
     script = step_script_by_id(BUMP_STEP_ID)
 
-    # Substitute `require-conventional-commits` before the blanket expression
-    # strip: the step's last rule compares it to "false", so blanking it instead
-    # would leave that rule permanently false and silently drop coverage.
-    script = script.replace(
-        "${{ inputs.require-conventional-commits }}", require_conventional
-    )
-    # The step reads its commit list from git and interpolates GitHub expressions
-    # into shell. Both are replaced so the real script can run outside Actions:
-    # `commits` becomes a literal newline-delimited string.
+    # The action reads its configuration from environment variables. The harness
+    # sets REQUIRE_CONVENTIONAL directly below; any remaining GitHub expressions
+    # in the action are stripped because they are not part of the logic under test.
     script = re.sub(r"\$\{\{[^}]*\}\}", "", script)
+    # The action reads its commit list from git. Replace the acquisition block
+    # with a direct assignment so the test can feed synthetic commits without
+    # relying on git log.
     script = re.sub(
-        r'^(\s*)COMMITS=\$\(git log[^\n]*\n',
-        lambda m: f"{m.group(1)}COMMITS=$(cat <<'__COMMITS__'\n"
-        + "".join(f"{c}\n" for c in commits)
-        + "__COMMITS__\n)\n",
+        r'^if git rev-parse.*?^fi\n',
+        lambda m: (
+            "COMMITS=$(cat <<'__COMMITS__'\n"
+            + "".join(f"{c}\n" for c in commits)
+            + "__COMMITS__\n"
+            + ")\n"
+        ),
         script,
         count=1,
-        flags=re.M,
+        flags=re.M | re.S,
     )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -108,6 +107,8 @@ def select_bump(
             f"export GITHUB_OUTPUT={out}\n"
             f"export BASE_BRANCH=main\n"
             f"export PR_TITLE={pr_title!r}\n"
+            f"export REQUIRE_CONVENTIONAL={require_conventional}\n"
+            f"export DEFAULT_BUMP=patch\n"
             f"cd {repo}\n"
             + script
         )
@@ -273,7 +274,7 @@ def main() -> int:
 
     print(
         f"checked {len(CASES)} bump-type selection case(s) against the "
-        f"{BUMP_STEP_ID!r} step of {WF.name}"
+        f"{BUMP_STEP_ID!r} step of {ACTION.name}"
     )
     if failures:
         return 1

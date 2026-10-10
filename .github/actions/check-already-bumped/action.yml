@@ -1,0 +1,89 @@
+name: Check Already Bumped
+branding:
+  icon: check-circle
+  color: blue
+description: |
+  Detects whether a PR branch already contains a version bump by comparing the
+  version file at the PR head against the latest release tag on the base branch.
+inputs:
+  version-file:
+    description: 'Path to the version file; use "auto" to detect from common files'
+    required: false
+    default: 'auto'
+  base-branch:
+    description: 'Base branch used to find the latest release tag'
+    required: true
+outputs:
+  already-bumped:
+    description: 'true if the PR head already carries a version newer than the base release'
+    value: ${{ steps.check.outputs.already_bumped }}
+runs:
+  using: composite
+  steps:
+    - name: Check already bumped
+      id: check
+      shell: bash
+      env:
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        VERSION_FILE_INPUT: ${{ inputs.version-file }}
+      run: |
+        resolve_version_from_file() {
+          local CONTENT="$1"
+          local VALUE=""
+          VALUE=$(echo "$CONTENT" | sed -nE "s/^version:[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
+          if [ -z "$VALUE" ]; then
+            VALUE=$(echo "$CONTENT" | sed -nE "s/^[[:space:]]*['\"]?([0-9]+\.[0-9]+\.[0-9]+)['\"]?[[:space:]]*$/\1/p" | head -1)
+          fi
+          echo "$VALUE"
+        }
+
+        if [ "$VERSION_FILE_INPUT" = "auto" ]; then
+          VERSION_FILE=""
+          for CANDIDATE in VERSION version.txt package.json pyproject.toml setup.py Cargo.toml galaxy.yml; do
+            if git cat-file -e "HEAD:$CANDIDATE" 2>/dev/null; then
+              VERSION_FILE="$CANDIDATE"
+              break
+            fi
+          done
+        else
+          VERSION_FILE="$VERSION_FILE_INPUT"
+        fi
+
+        head_version=""
+        if [ -n "$VERSION_FILE" ]; then
+          HEAD_CONTENT=$(git show "HEAD:$VERSION_FILE" 2>/dev/null || true)
+          head_version=$(resolve_version_from_file "$HEAD_CONTENT")
+        fi
+
+        if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+          base_version=$(git tag --merged "origin/$BASE_BRANCH" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1 || true)
+        else
+          base_version=$(git tag --merged "$BASE_BRANCH" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1 || true)
+        fi
+        base_version="${base_version#v}"
+
+        skip=false
+        if [ -n "$head_version" ] && [ -n "$base_version" ]; then
+          if [ "$head_version" != "$base_version" ]; then
+            echo "PR head already carries version $head_version, but $BASE_BRANCH has only released $base_version"
+            skip=true
+          else
+            echo "PR head is still at the released base version $base_version"
+          fi
+        else
+          echo "::warning::Could not compare the PR head version against a base release tag; falling back to the commit-message check"
+          if git log -1 --pretty=%B | grep -q "chore: bump version"; then
+            echo "Last commit was a version bump, skipping"
+            skip=true
+          fi
+        fi
+
+        if [ "$skip" = "true" ]; then
+          echo "already_bumped=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "already_bumped=false" >> "$GITHUB_OUTPUT"
+        fi

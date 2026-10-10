@@ -1,0 +1,75 @@
+name: Run pre-commit
+branding:
+  icon: check-circle
+  color: blue
+description: |
+  Installs mise, resolves the Python version from mise.toml, installs pre-commit,
+  and runs the configured hooks. Intended for CI runners where network access is
+  available, unlike pre-commit.ci.
+inputs:
+  all-files:
+    description: 'Run hooks on all files instead of only changed files'
+    required: false
+    default: 'true'
+  args:
+    description: 'Extra arguments passed to pre-commit run'
+    required: false
+    default: ''
+  custom-config:
+    description: 'Path to a custom pre-commit config file'
+    required: false
+    default: ''
+  fail-on-missing:
+    description: 'Fail if no pre-commit config is found'
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Check for pre-commit config
+      id: detect-config
+      shell: bash
+      run: |
+        CONFIG_PATH=""
+        if [ -n "${{ inputs.custom-config }}" ] && [ -f "${{ inputs.custom-config }}" ]; then
+          CONFIG_PATH="${{ inputs.custom-config }}"
+        elif [ -f ".pre-commit-config.yaml" ]; then
+          CONFIG_PATH=".pre-commit-config.yaml"
+        elif [ -f ".pre-commit-config.yml" ]; then
+          CONFIG_PATH=".pre-commit-config.yml"
+        fi
+
+        if [ -n "$CONFIG_PATH" ]; then
+          echo "config_found=true" >> "$GITHUB_OUTPUT"
+          echo "config_path=$CONFIG_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found pre-commit config: $CONFIG_PATH"
+        else
+          echo "config_found=false" >> "$GITHUB_OUTPUT"
+          echo "No pre-commit config found"
+          if [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+            exit 1
+          fi
+        fi
+
+    - name: Install mise and tools
+      if: steps.detect-config.outputs.config_found == 'true'
+      uses: jdx/mise-action@v2
+
+    - name: Install pre-commit
+      if: steps.detect-config.outputs.config_found == 'true'
+      shell: bash
+      run: |
+        mise exec -- pip install --upgrade pip
+        mise exec -- pip install pre-commit
+
+    - name: Run pre-commit
+      if: steps.detect-config.outputs.config_found == 'true'
+      shell: bash
+      run: |
+        if [ "${{ inputs.all-files }}" == "true" ]; then
+          ALL_FILES="--all-files"
+        else
+          ALL_FILES=""
+        fi
+
+        mise exec -- pre-commit run $ALL_FILES --show-diff-on-failure ${{ inputs.args }}

@@ -1,0 +1,74 @@
+name: Install actionlint
+branding:
+  icon: download
+  color: blue
+description: |
+  Downloads and installs the actionlint binary for the current runner OS and
+  architecture, verifies it runs, and returns the absolute path.
+inputs:
+  version:
+    description: 'actionlint version to install'
+    required: false
+    default: '1.7.3'
+outputs:
+  actionlint-path:
+    description: 'Absolute path to the installed actionlint binary'
+    value: ${{ steps.install.outputs.actionlint_path }}
+runs:
+  using: composite
+  steps:
+    - name: Install actionlint
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        case "$RUNNER_OS" in
+          Linux)
+            OS="linux"
+            ;;
+          macOS)
+            OS="darwin"
+            ;;
+          Windows)
+            OS="windows"
+            ;;
+          *)
+            echo "::error::Unsupported runner OS: $RUNNER_OS"
+            exit 1
+            ;;
+        esac
+
+        case "$RUNNER_ARCH" in
+          X64)
+            ARCH="amd64"
+            ;;
+          ARM64)
+            ARCH="arm64"
+            ;;
+          *)
+            echo "::error::Unsupported runner architecture: $RUNNER_ARCH"
+            exit 1
+            ;;
+        esac
+
+        INSTALL_DIR="${RUNNER_TOOL_CACHE:-$HOME}/actionlint/$VERSION"
+        mkdir -p "$INSTALL_DIR"
+        BIN="$INSTALL_DIR/actionlint"
+
+        if [ -x "$BIN" ]; then
+          echo "Using cached actionlint $VERSION"
+        else
+          URL="https://github.com/rhysd/actionlint/releases/download/v$VERSION/actionlint_${VERSION}_${OS}_${ARCH}.tar.gz"
+          echo "Downloading actionlint from $URL"
+          curl -L --fail "$URL" | tar -xz -C "$INSTALL_DIR" actionlint
+          chmod +x "$BIN"
+        fi
+
+        "$BIN" --version
+        ABS_BIN=$(cd "$INSTALL_DIR" && pwd)/actionlint
+
+        echo "actionlint_path=$ABS_BIN" >> "$GITHUB_OUTPUT"
+        echo "actionlint installed: $ABS_BIN"
