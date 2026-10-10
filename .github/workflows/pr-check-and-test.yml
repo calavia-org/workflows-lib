@@ -260,12 +260,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: $/.github/actions/setup-pre-commit
+      - uses: $/.github/actions/run-pre-commit
         with:
-          technology: ${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}
           custom-config: ${{ inputs.custom-pre-commit-config }}
           fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
-          run-all-files: 'true'
+          all-files: 'true'
 
   # Unit tests are the mandatory gate for the code under test. Always runs, so a
   # skipped unit job still reports instead of vanishing.
