@@ -23,7 +23,7 @@ jobs:
       pull-requests: write
     uses: $/.github/workflows/pr-check-and-bump.yml
     with:
-      allowed-branch-pattern: "^(major|feat|fix|chore|docs|ci|test|refactor|perf|style)/.+"
+      allowed-branch-pattern: "^(major|feat|fix|chore|docs|ci|test|refactor|perf|style|dependabot)/.+"
       allowed-target-branches: "main,release/*"
       version-file: "VERSION"
       # VERSION is what the release publishes, so it cannot disagree with the

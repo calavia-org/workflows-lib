@@ -24,7 +24,7 @@ CASES = [
         "name": "feature branch to main",
         "inputs": {
             "branch": "feat/new-thing",
-            "allowed-branch-pattern": r"^(major|feat|fix|doc)/.+",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "main",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": r"^doc/.+",
@@ -35,7 +35,7 @@ CASES = [
         "name": "docs branch skips bump",
         "inputs": {
             "branch": "doc/readme-update",
-            "allowed-branch-pattern": r"^(major|feat|fix|doc)/.+",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "main",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": r"^doc/.+",
@@ -46,7 +46,7 @@ CASES = [
         "name": "invalid branch name",
         "inputs": {
             "branch": "random-branch",
-            "allowed-branch-pattern": r"^(major|feat|fix|doc)/.+",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "main",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",
@@ -57,7 +57,7 @@ CASES = [
         "name": "target release branch",
         "inputs": {
             "branch": "fix/critical",
-            "allowed-branch-pattern": r"^(major|feat|fix|doc)/.+",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "release/1.2",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",
@@ -68,7 +68,7 @@ CASES = [
         "name": "disallowed target branch",
         "inputs": {
             "branch": "fix/critical",
-            "allowed-branch-pattern": r"^(major|feat|fix|doc)/.+",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "develop",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",
@@ -80,6 +80,17 @@ CASES = [
         "inputs": {
             "branch": "anything-goes",
             "allowed-branch-pattern": "",
+            "target-branch": "main",
+            "allowed-target-branches": "main,release/*",
+            "no-bump-branch-pattern": "",
+        },
+        "want": {"branch-valid": "true", "target-valid": "true", "should-bump": "true"},
+    },
+    {
+        "name": "dependabot branch allowed",
+        "inputs": {
+            "branch": "dependabot/github_actions/github-actions-640176b5ab",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
             "target-branch": "main",
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",

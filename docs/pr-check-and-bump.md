@@ -15,7 +15,7 @@ Validates PRs follow conventional commit format and automatically bumps version 
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `allowed-branch-pattern` | Regex for branch names. Set empty to disable | No | `^(major\|feat\|fix\|doc)/.+` |
+| `allowed-branch-pattern` | Regex for branch names. Set empty to disable | No | `^(major\|feat\|fix\|doc\|chore\|docs\|ci\|test\|refactor\|perf\|style\|dependabot)/.+` |
 | `allowed-target-branches` | Allowed target branches | No | `main,release/*` |
 | `version-file` | Path to version file, or `auto` for detection | No | `auto` |
 | `no-bump-branch-pattern` | Regex for branches that skip the bump. Leave empty to bump every allowed branch | No | `""` |
