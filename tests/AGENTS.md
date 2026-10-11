@@ -16,6 +16,8 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 | `release-github-floating-tag.py` | Floating `v<major>` tag derives from the created tag; empty tag aborts |
 | `detect-technology.py` | Technology-detection vocabulary (`ansible > python > nodejs` precedence) |
 | `validate-actions.py` | Every composite action's metadata resolves to real steps/outputs |
+| `validate-branch.py` | Branch/target validation accepts allowed patterns and rejects invalid ones |
+| `self-bump-branch-pattern.py` | self-bump admits `dependabot/` branches and does not skip their bump |
 | `doc-refs.py` | Every documented `...@<ref>` resolves to a published tag (needs tag history) |
 
 ## CONVENTIONS
