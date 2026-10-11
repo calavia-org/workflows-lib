@@ -104,7 +104,9 @@ def main() -> int:
         if f"major-tag={expected}" not in out:
             failures.append(f"{tag}: expected major-tag={expected}, got {out!r}")
         if f"tag -f {expected} {tag}" not in calls:
-            failures.append(f"{tag}: expected 'tag -f {expected} {tag}', got {calls.strip()!r}")
+            failures.append(
+                f"{tag}: expected 'tag -f {expected} {tag}', got {calls.strip()!r}"
+            )
         if f"push origin {expected} --force" not in calls:
             failures.append(
                 f"{tag}: expected 'push origin {expected} --force', got {calls.strip()!r}"
@@ -128,14 +130,14 @@ def main() -> int:
 
     total = len(MAJOR_CASES) + 1
     print(
-        f"floating-tag OK ({total} cases: "
-        f"{len(MAJOR_CASES)} majors, 1 empty-tag abort)"
+        f"floating-tag OK ({total} cases: {len(MAJOR_CASES)} majors, 1 empty-tag abort)"
     )
     return 0
 
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -41,7 +41,7 @@ runs:
       run: |
         MANAGER="${{ inputs.package-manager }}"
         ARTIFACT="${{ inputs.artifact-path }}"
-        
+
         case "$MANAGER" in
           npm)
             if [ -f "package.json" ]; then
@@ -80,5 +80,5 @@ runs:
             echo "⚠️ Unknown package manager: $MANAGER"
             ;;
         esac
-        
+
         echo "✅ Package published"

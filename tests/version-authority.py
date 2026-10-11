@@ -187,7 +187,11 @@ def main() -> int:
 
     # 1. The contract must not accept an empty version.
     c_version = contract[True]["workflow_call"]["inputs"]["version"]
-    check("contract version is required", c_version.get("required") is True, str(c_version))
+    check(
+        "contract version is required",
+        c_version.get("required") is True,
+        str(c_version),
+    )
     check(
         "contract version has no default",
         "default" not in c_version,
@@ -196,7 +200,9 @@ def main() -> int:
 
     # 2. Same at the implementation boundary.
     a_version = action["inputs"]["version"]
-    check("action version is required", a_version.get("required") is True, str(a_version))
+    check(
+        "action version is required", a_version.get("required") is True, str(a_version)
+    )
     check(
         "action version has no default",
         "default" not in a_version,
@@ -257,9 +263,15 @@ def main() -> int:
     #    bump-version writes a *bare* value for a file named VERSION, so nothing
     #    structural could see the disagreement. These execute the real block.
     update_steps = [
-        s for s in yaml.safe_load(BUMP_ACTION.read_text())["runs"]["steps"] if s.get("id") == "update"
+        s
+        for s in yaml.safe_load(BUMP_ACTION.read_text())["runs"]["steps"]
+        if s.get("id") == "update"
     ]
-    check("bump-version has one update step", len(update_steps) == 1, f"found {len(update_steps)}")
+    check(
+        "bump-version has one update step",
+        len(update_steps) == 1,
+        f"found {len(update_steps)}",
+    )
 
     script = _reader_script()
     check("base-version reader action step exists", script is not None)
@@ -272,18 +284,26 @@ def main() -> int:
             "writer shape changed; the reader contract must be re-derived",
         )
 
-# Distinct from the forward-move guard, which only proves a bump moves forward:
-# this proves `minor` produces the right number. Bumping PATCH instead still
-# passes that guard, so a wrong version would ship with every check green.
+        # Distinct from the forward-move guard, which only proves a bump moves forward:
+        # this proves `minor` produces the right number. Bumping PATCH instead still
+        # passes that guard, so a wrong version would ship with every check green.
         bump = _bump_script()
         check("bump arithmetic step exists", bump is not None)
 
         if bump:
             for current, kind, want, why in [
-                ("0.15.0", "minor", "0.16.0",
-                 "REGRESSION: feat/ + 0.15.0 must yield 0.16.0, the version #62 ships"),
-                ("0.15.7", "minor", "0.16.0",
-                 "REGRESSION: minor must zero the patch, not carry it"),
+                (
+                    "0.15.0",
+                    "minor",
+                    "0.16.0",
+                    "REGRESSION: feat/ + 0.15.0 must yield 0.16.0, the version #62 ships",
+                ),
+                (
+                    "0.15.7",
+                    "minor",
+                    "0.16.0",
+                    "REGRESSION: minor must zero the patch, not carry it",
+                ),
                 ("0.15.0", "patch", "0.15.1", "patch moves only the patch"),
                 ("0.15.9", "patch", "0.15.10", "patch rolls into a double digit"),
                 ("0.15.0", "major", "1.0.0", "major zeroes minor and patch"),
@@ -324,31 +344,79 @@ def main() -> int:
             f"exit={code} resolved={resolved!r}",
         )
 
-# 7. Section 6's argument, applied to the release gate: a wrong comparison here
-#    passes section 5's structural checks and then decides the opposite at run
-#    time — skipping a release that should ship, or republishing a shipped one.
+    # 7. Section 6's argument, applied to the release gate: a wrong comparison here
+    #    passes section 5's structural checks and then decides the opposite at run
+    #    time — skipping a release that should ship, or republishing a shipped one.
     rel = _release_resolve_script()
     check("release resolve step exists", rel is not None)
 
     if rel:
         # (VERSION contents, tags, rc, version, should_release, why)
         for content, tags, rc, ver, rel_out, why in [
-            ("0.16.0\n", ["v0.15.0"], 0, "0.16.0", "true",
-             "REGRESSION: a bumped VERSION past the latest tag must publish"),
-            ("0.15.0\n", ["v0.15.0"], 0, "0.15.0", "false",
-             "REGRESSION: an already-released VERSION must skip, not republish"),
-            ("0.16.0\n", [], 0, "0.16.0", "true",
-             "first release with no tags yet must publish"),
-            ("0.15.0\n", ["v0.14.0", "v0.15.0"], 0, "0.15.0", "false",
-             "the nearest reachable tag is the one that counts"),
-            ("0.16.0\n\n", ["v0.15.0"], 0, "0.16.0", "true",
-             "trailing blank lines must not break the read"),
-            (None, ["v0.15.0"], 1, None, None,
-             "a missing VERSION must fail loudly, never publish"),
-            ("0.16.0-rc.1\n", ["v0.15.0"], 1, None, None,
-             "a prerelease VERSION must be refused"),
-            ("not-a-version\n", ["v0.15.0"], 1, None, None,
-             "garbage VERSION must be refused"),
+            (
+                "0.16.0\n",
+                ["v0.15.0"],
+                0,
+                "0.16.0",
+                "true",
+                "REGRESSION: a bumped VERSION past the latest tag must publish",
+            ),
+            (
+                "0.15.0\n",
+                ["v0.15.0"],
+                0,
+                "0.15.0",
+                "false",
+                "REGRESSION: an already-released VERSION must skip, not republish",
+            ),
+            (
+                "0.16.0\n",
+                [],
+                0,
+                "0.16.0",
+                "true",
+                "first release with no tags yet must publish",
+            ),
+            (
+                "0.15.0\n",
+                ["v0.14.0", "v0.15.0"],
+                0,
+                "0.15.0",
+                "false",
+                "the nearest reachable tag is the one that counts",
+            ),
+            (
+                "0.16.0\n\n",
+                ["v0.15.0"],
+                0,
+                "0.16.0",
+                "true",
+                "trailing blank lines must not break the read",
+            ),
+            (
+                None,
+                ["v0.15.0"],
+                1,
+                None,
+                None,
+                "a missing VERSION must fail loudly, never publish",
+            ),
+            (
+                "0.16.0-rc.1\n",
+                ["v0.15.0"],
+                1,
+                None,
+                None,
+                "a prerelease VERSION must be refused",
+            ),
+            (
+                "not-a-version\n",
+                ["v0.15.0"],
+                1,
+                None,
+                None,
+                "garbage VERSION must be refused",
+            ),
         ]:
             code, got_v, got_rel = _release_resolve(rel, content, tags)
             check(
@@ -372,6 +440,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

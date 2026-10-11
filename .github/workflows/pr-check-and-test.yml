@@ -350,14 +350,14 @@ jobs:
         shell: bash
         run: |
           TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
-          
+
           # Use custom command if provided
           if [ -n "${{ inputs.build-command }}" ]; then
             echo "Running custom build command..."
             ${{ inputs.build-command }}
             exit 0
           fi
-          
+
           # Technology-specific build
           case "$TECH" in
             python)
@@ -448,14 +448,14 @@ jobs:
         shell: bash
         run: |
           TECH="${{ inputs.technology != 'auto' && inputs.technology || needs.detect.outputs.primary }}"
-          
+
           # Use custom command if provided
           if [ -n "${{ inputs.package-command }}" ]; then
             echo "Running custom package command..."
             ${{ inputs.package-command }}
             exit 0
           fi
-          
+
             # Technology-specific package
             case "$TECH" in
               python)

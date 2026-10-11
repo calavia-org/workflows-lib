@@ -42,7 +42,12 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPO = "calavia-org/workflows-lib"
-DOCS = ("README.md", "RELEASE.md", "docs/release-artifacts.md", "docs/pr-check-and-bump.md")
+DOCS = (
+    "README.md",
+    "RELEASE.md",
+    "docs/release-artifacts.md",
+    "docs/pr-check-and-bump.md",
+)
 
 # A documented reference: `<repo>/<path>@<ref>`, in any form documentation takes.
 # The `uses:` prefix is deliberately not required -- requiring it would exempt every
@@ -52,9 +57,7 @@ DOCS = ("README.md", "RELEASE.md", "docs/release-artifacts.md", "docs/pr-check-a
 # refname, so in a document they can only be markdown punctuation. A trailing `.` is
 # legal inside a ref (`v0.15.0`) but illegal at the end of one, so it is stripped
 # after capture -- adding it to this class instead would reject every version tag.
-REF_RE = re.compile(
-    re.escape(REPO) + r"/(?P<path>[^\s@`+,;:]+)@(?P<ref>[^\s`+,;:]+)"
-)
+REF_RE = re.compile(re.escape(REPO) + r"/(?P<path>[^\s@`+,;:]+)@(?P<ref>[^\s`+,;:]+)")
 FENCE_RE = re.compile(r"^\s*```")
 SKIP_MARKER = "doc-ref-test: skip"
 
@@ -81,7 +84,9 @@ def local_tags() -> set[str]:
     )
     tags = {line.strip() for line in proc.stdout.splitlines() if line.strip()}
     if not tags:
-        print("error: no tags in this clone; run `git fetch --tags` (CI needs fetch-depth: 0)")
+        print(
+            "error: no tags in this clone; run `git fetch --tags` (CI needs fetch-depth: 0)"
+        )
         sys.exit(1)
     return tags
 
@@ -165,7 +170,9 @@ def main() -> int:
                 checked += 1
 
                 if ref not in tags:
-                    failures.append(f"{relative}:{number}: @{ref} matches no published tag")
+                    failures.append(
+                        f"{relative}:{number}: @{ref} matches no published tag"
+                    )
                 elif not path_exists_at_ref(ref, path):
                     failures.append(
                         f"{relative}:{number}: {path} does not exist at @{ref}"
@@ -174,9 +181,13 @@ def main() -> int:
     for failure in failures:
         print(f"error: {failure}")
 
-    print(f"checked {checked} documented consumer reference(s) against {len(tags)} published tag(s)")
+    print(
+        f"checked {checked} documented consumer reference(s) against {len(tags)} published tag(s)"
+    )
     if exempted:
-        print(f"skipped {exempted} reference(s) in explicitly marked illustration block(s)")
+        print(
+            f"skipped {exempted} reference(s) in explicitly marked illustration block(s)"
+        )
     return 1 if failures else 0
 
 

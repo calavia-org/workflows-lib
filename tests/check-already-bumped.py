@@ -41,8 +41,12 @@ def run_action(
     with tempfile.TemporaryDirectory() as repo_dir:
         repo = Path(repo_dir)
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"], cwd=repo, check=True
+        )
 
         (repo / "VERSION").write_text(base_version + "\n")
         (repo / "marker").write_text("base")
@@ -143,6 +147,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

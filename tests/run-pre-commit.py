@@ -59,9 +59,7 @@ def test_mise_python_version():
 def test_action_uses_mise():
     steps = action_steps()
     uses = [step.get("uses", "") for step in steps]
-    assert any("mise-action" in u for u in uses), (
-        "action does not use jdx/mise-action"
-    )
+    assert any("mise-action" in u for u in uses), "action does not use jdx/mise-action"
     print("run-pre-commit OK: action uses mise tooling")
 
 

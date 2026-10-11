@@ -29,9 +29,7 @@ def test_tox_env_list():
 def test_action_uses_mise():
     steps = action_steps()
     uses = [step.get("uses", "") for step in steps]
-    assert any("mise-action" in u for u in uses), (
-        "action does not use jdx/mise-action"
-    )
+    assert any("mise-action" in u for u in uses), "action does not use jdx/mise-action"
     print("run-tox OK: action uses mise tooling")
 
 

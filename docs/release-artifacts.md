@@ -42,7 +42,7 @@ For Ansible collections, the workflow supports two artifact types:
 1. **Collection Build** (`ansible-galaxy collection build`)
    - Builds the collection tarball
    - Publishes to Ansible Galaxy
-   
+
 2. **Execution Environment** (`ansible-builder`)
    - Builds Docker image using `ansible-builder`
    - Publishes to GHCR

@@ -94,10 +94,10 @@ runs:
       shell: bash
       run: |
         echo "Publishing coverage report..."
-        
+
         # Find coverage files
         COVERAGE_FILES=$(find ${{ inputs.test-results-path }} -name "coverage*.xml" -o -name "coverage*.json" -o -name "*.cov" 2>/dev/null || true)
-        
+
         if [ -n "$COVERAGE_FILES" ]; then
           echo "Found coverage files:"
           echo "$COVERAGE_FILES"
@@ -111,13 +111,13 @@ runs:
       shell: bash
       run: |
         echo "Publishing SARIF reports..."
-        
+
         if [ -d "${{ inputs.sarif-path }}" ]; then
           echo "SARIF reports found:"
           find ${{ inputs.sarif-path }} -name "*.sarif" -o -name "*.json" | while read file; do
             echo "  - $file"
           done
-          
+
           # Upload to GitHub Security tab
           echo "Uploading to GitHub Security tab..."
           # Note: This requires the github/codeql-action/upload-sarif action
@@ -134,26 +134,26 @@ runs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## Technology: ${{ inputs.technology }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        
+
         # Test results summary
         if [ -d "${{ inputs.test-results-path }}" ]; then
           echo "### Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Count test files
           TEST_COUNT=$(find ${{ inputs.test-results-path }} -name "*.xml" -o -name "*.json" | wc -l)
           echo "- Test result files: $TEST_COUNT" >> $GITHUB_STEP_SUMMARY
-          
+
           # Coverage summary
           if [ -n "$(find ${{ inputs.test-results-path }} -name 'coverage*' -print -quit)" ]; then
             echo "- Coverage report: ✅ Available" >> $GITHUB_STEP_SUMMARY
           else
             echo "- Coverage report: ⚠️ Not available" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
         fi
-        
+
         # Artifacts summary
         echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
@@ -176,7 +176,7 @@ runs:
             `- Test results: Available\n` +
             `- Coverage report: ${process.env.COVERAGE_STATUS}\n` +
             `- Retention: ${{ inputs.artifact-retention-days }} days\n`;
-          
+
           // Post comment on PR
           github.rest.issues.createComment({
             issue_number: context.issue.number,
@@ -191,12 +191,12 @@ runs:
       run: |
         if [ -n "${{ inputs.slack-webhook }}" ]; then
           echo "Sending Slack notification..."
-          
+
           STATUS="${{ job.status }}"
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
+
           if [ "$STATUS" == "success" ]; then
             COLOR="#36a64f"
             TEXT="✅ CI passed for ${REPO} on ${BRANCH}"
@@ -204,7 +204,7 @@ runs:
             COLOR="#ff0000"
             TEXT="❌ CI failed for ${REPO} on ${BRANCH}"
           fi
-          
+
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"attachments\":[{\"color\":\"${COLOR}\",\"text\":\"${TEXT}\",\"fields\":[{\"title\":\"Repository\",\"value\":\"${REPO}\",\"short\":true},{\"title\":\"Branch\",\"value\":\"${BRANCH}\",\"short\":true},{\"title\":\"Run URL\",\"value\":\"${RUN_URL}\",\"short\":false}]}]}" \
             ${{ inputs.slack-webhook }} || true

@@ -44,12 +44,12 @@ runs:
       run: |
         IMAGE="${{ inputs.image-tag }}"
         PUSHED=""
-        
+
         # Push main tag
         docker push "$IMAGE"
         PUSHED="$IMAGE"
         echo "Pushed: $IMAGE"
-        
+
         # Push additional tags
         IFS=',' read -ra TAGS <<< "${{ inputs.additional-tags }}"
         for tag in "${TAGS[@]}"; do
@@ -63,6 +63,6 @@ runs:
             echo "Pushed: $ADDITIONAL"
           fi
         done
-        
+
         echo "pushed-tags=$PUSHED" >> "$GITHUB_OUTPUT"
         echo "✅ All tags pushed to GHCR"

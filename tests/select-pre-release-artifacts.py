@@ -29,7 +29,9 @@ def extract_step_script() -> str:
     raise KeyError("step select not found")
 
 
-def run_action(*, selector: str, create_empty: bool = False) -> tuple[int, dict[str, str]]:
+def run_action(
+    *, selector: str, create_empty: bool = False
+) -> tuple[int, dict[str, str]]:
     script = extract_step_script()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -130,9 +132,13 @@ def main() -> int:
             create_empty=case["create_empty"],
         )
         if rc != case["want_rc"]:
-            failures.append(f"{case['name']}: expected exit {case['want_rc']}, got {rc}")
+            failures.append(
+                f"{case['name']}: expected exit {case['want_rc']}, got {rc}"
+            )
             continue
-        path_count = len(outputs.get("paths", "").splitlines()) if outputs.get("paths") else 0
+        path_count = (
+            len(outputs.get("paths", "").splitlines()) if outputs.get("paths") else 0
+        )
         if path_count != case["want_paths"]:
             failures.append(
                 f"{case['name']}: expected {case['want_paths']} paths, got {path_count}"
@@ -150,6 +156,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

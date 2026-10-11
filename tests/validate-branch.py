@@ -16,7 +16,8 @@ from pathlib import Path
 import yaml
 
 ACTION = (
-    Path(__file__).resolve().parent.parent / ".github/actions/validate-branch/action.yml"
+    Path(__file__).resolve().parent.parent
+    / ".github/actions/validate-branch/action.yml"
 )
 
 CASES = [
@@ -40,7 +41,11 @@ CASES = [
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": r"^doc/.+",
         },
-        "want": {"branch-valid": "true", "target-valid": "true", "should-bump": "false"},
+        "want": {
+            "branch-valid": "true",
+            "target-valid": "true",
+            "should-bump": "false",
+        },
     },
     {
         "name": "invalid branch name",
@@ -51,7 +56,11 @@ CASES = [
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",
         },
-        "want": {"branch-valid": "false", "target-valid": "true", "should-bump": "true"},
+        "want": {
+            "branch-valid": "false",
+            "target-valid": "true",
+            "should-bump": "true",
+        },
     },
     {
         "name": "target release branch",
@@ -73,7 +82,11 @@ CASES = [
             "allowed-target-branches": "main,release/*",
             "no-bump-branch-pattern": "",
         },
-        "want": {"branch-valid": "true", "target-valid": "false", "should-bump": "true"},
+        "want": {
+            "branch-valid": "true",
+            "target-valid": "false",
+            "should-bump": "true",
+        },
     },
     {
         "name": "validation disabled",
@@ -182,7 +195,9 @@ def main() -> int:
 
         for key in want:
             if got.get(key) != want[key]:
-                failures.append(f"{name}: {key} expected {want[key]!r}, got {got[key]!r}")
+                failures.append(
+                    f"{name}: {key} expected {want[key]!r}, got {got[key]!r}"
+                )
 
     if failures:
         print(f"validate-branch FAILED ({len(failures)} problem(s)):")
@@ -196,6 +211,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

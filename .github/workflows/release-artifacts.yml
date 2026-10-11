@@ -503,7 +503,7 @@ jobs:
           REPO="${{ github.repository }}"
           VERSION="${{ needs.detect.outputs.version }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
+
           if [ "$STATUS" == "success" ]; then
             COLOR="#36a64f"
             TEXT="✅ Released ${REPO} v${VERSION}"
@@ -511,7 +511,7 @@ jobs:
             COLOR="#ff0000"
             TEXT="❌ Release failed for ${REPO} v${VERSION}"
           fi
-          
+
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"attachments\":[{\"color\":\"${COLOR}\",\"text\":\"${TEXT}\",\"fields\":[{\"title\":\"Repository\",\"value\":\"${REPO}\",\"short\":true},{\"title\":\"Version\",\"value\":\"v${VERSION}\",\"short\":true},{\"title\":\"Run URL\",\"value\":\"${RUN_URL}\",\"short\":false}]}]}" \
             ${{ inputs.slack-webhook }} || true

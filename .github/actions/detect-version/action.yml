@@ -25,7 +25,7 @@ runs:
         VERSION=""
         VERSION_FILE=""
         TECH=""
-        
+
         # If custom version source provided, use it
         if [ "${{ inputs.version-source }}" != "auto" ] && [ -f "${{ inputs.version-source }}" ]; then
           VERSION_FILE="${{ inputs.version-source }}"
@@ -47,7 +47,7 @@ runs:
               ;;
           esac
         fi
-        
+
         # Auto-detect from standard files (priority order)
         if [ -z "$VERSION_FILE" ]; then
           # Check galaxy.yml (Ansible)
@@ -57,7 +57,7 @@ runs:
             TECH="ansible"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check pom.xml (Java)
           if [ -f "pom.xml" ]; then
@@ -66,7 +66,7 @@ runs:
             TECH="java"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check Chart.yml (Helm)
           if [ -f "Chart.yml" ] || [ -f "chart.yml" ]; then
@@ -76,7 +76,7 @@ runs:
             TECH="helm"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check package.json (Node.js)
           if [ -f "package.json" ]; then
@@ -85,7 +85,7 @@ runs:
             TECH="nodejs"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check Cargo.toml (Rust)
           if [ -f "Cargo.toml" ]; then
@@ -94,7 +94,7 @@ runs:
             TECH="rust"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check pyproject.toml (Python)
           if [ -f "pyproject.toml" ]; then
@@ -103,7 +103,7 @@ runs:
             TECH="python"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check setup.py (Python legacy)
           if [ -f "setup.py" ]; then
@@ -112,7 +112,7 @@ runs:
             TECH="python"
           fi
         fi
-        
+
         if [ -z "$VERSION_FILE" ]; then
           # Check VERSION or version.txt (Generic)
           if [ -f "VERSION" ]; then
@@ -125,7 +125,7 @@ runs:
             TECH="generic"
           fi
         fi
-        
+
         if [ -n "$VERSION" ]; then
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version-file=$VERSION_FILE" >> "$GITHUB_OUTPUT"
