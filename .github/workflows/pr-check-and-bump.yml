@@ -6,7 +6,7 @@ name: PR Check and Auto-Bump
       allowed-branch-pattern:
         description: Regex pattern for allowed branch names (optional, set empty to disable)
         type: string
-        default: ^(major|feat|fix|doc)/.+
+        default: ^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+
       allowed-target-branches:
         description: Comma-separated list of allowed target branch patterns
         type: string
