@@ -163,6 +163,13 @@ repos:
         pass_filenames: false
         files: '(mise\.toml|\.github/actions/run-pre-commit/action\.yml|tests/run-pre-commit\.py)$'
 
+      - id: self-bump-branch-pattern
+        name: verify self-bump admits Dependabot branches and still bumps them
+        entry: pytest tests/self-bump-branch-pattern.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/self-bump\.yml|\.github/workflows/pr-check-and-bump\.yml|tests/self-bump-branch-pattern\.py)$'
+
       - id: select-pre-release-artifacts
         name: verify pre-release artifact selector only accepts binary artifacts
         entry: pytest tests/select-pre-release-artifacts.py
