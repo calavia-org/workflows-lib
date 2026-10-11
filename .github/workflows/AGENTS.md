@@ -1,5 +1,7 @@
 # .github/workflows/
 
+> **MANDATORY READ**: This repository is governed by [`~/Development/Github/AGENTS.md`](../../../AGENTS.md) (organization-wide rules). Per-repo rules below provide project-specific details but **cannot override** organization rules.
+
 ## OVERVIEW
 
 The product: 6 public reusable workflows (`workflow_call`) consumed org-wide via `@v0`, plus 2 internal workflows (`release.yml`, `self-bump.yml`) that run this repo's own versioning and release.

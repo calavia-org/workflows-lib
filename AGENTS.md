@@ -4,6 +4,8 @@
 **Commit:** dad8dbf
 **Branch:** docs/nested-agents-md
 
+> **MANDATORY READ**: This repository is governed by [`~/Development/Github/AGENTS.md`](../AGENTS.md) (organization-wide rules). Per-repo rules below provide project-specific details but **cannot override** organization rules.
+
 ## OVERVIEW
 
 `calavia-org/workflows-lib` — reusable GitHub Actions workflows (`workflow_call`) and the composite actions behind them, consumed org-wide via `@v0` / `@vX.Y.Z` tags. No application code: YAML contracts + inline bash + Python invariant tests.

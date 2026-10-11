@@ -1,5 +1,7 @@
 # .github/actions/
 
+> **MANDATORY READ**: This repository is governed by [`~/Development/Github/AGENTS.md`](../../../AGENTS.md) (organization-wide rules). Per-repo rules below provide project-specific details but **cannot override** organization rules.
+
 ## OVERVIEW
 
 21 composite actions — the internal implementation layer behind the reusable workflows. Not public API: consumers call `../workflows/`, never these directly. Every action is one `action.yml` with inline bash; no external `.sh` files.
