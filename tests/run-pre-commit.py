@@ -9,7 +9,6 @@ action; this suite checks the contract without needing network or mise installed
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import yaml
@@ -24,13 +23,11 @@ def action_steps() -> list[dict]:
     return data["runs"]["steps"]
 
 
-def test_mise_python_version() -> int:
-    if not MISE.exists():
-        print("run-pre-commit FAILED: mise.toml is missing")
-        return 1
-
+def _mise_python_version() -> str:
     # mise.toml is TOML, not YAML; parse the small pinned-tools section directly
     # to keep the test's only dependency as pyyaml.
+    assert MISE.exists(), "mise.toml is missing"
+
     version = ""
     in_tools = False
     for line in MISE.read_text().splitlines():
@@ -45,56 +42,44 @@ def test_mise_python_version() -> int:
             _, _, value = stripped.partition("=")
             version = value.strip().strip('"').strip("'")
             break
-    if not version:
-        print("run-pre-commit FAILED: mise.toml does not pin a Python version")
-        return 1
 
+    assert version, "mise.toml does not pin a Python version"
     major, minor, *_ = str(version).split(".")
-    if int(major) < 3 or (int(major) == 3 and int(minor) < 10):
-        print(f"run-pre-commit FAILED: Python {version} is too old; must be >= 3.10")
-        return 1
+    assert int(major) > 3 or (int(major) == 3 and int(minor) >= 10), (
+        f"Python {version} is too old; must be >= 3.10"
+    )
+    return version
 
+
+def test_mise_python_version():
+    version = _mise_python_version()
     print(f"run-pre-commit OK: mise.toml pins Python {version}")
-    return 0
 
 
-def test_action_uses_mise() -> int:
+def test_action_uses_mise():
     steps = action_steps()
-    for step in steps:
-        uses = step.get("uses", "")
-        if "mise-action" in uses:
-            print(f"run-pre-commit OK: action uses mise tooling ({uses})")
-            return 0
-
-    print("run-pre-commit FAILED: action does not use jdx/mise-action")
-    return 1
+    uses = [step.get("uses", "") for step in steps]
+    assert any("mise-action" in u for u in uses), (
+        "action does not use jdx/mise-action"
+    )
+    print("run-pre-commit OK: action uses mise tooling")
 
 
-def test_action_runs_precommit_all_files() -> int:
+def test_action_runs_precommit_all_files():
     steps = action_steps()
-    for step in steps:
-        run = step.get("run", "")
-        if "pre-commit run" in run and "--all-files" in run:
-            print("run-pre-commit OK: action runs pre-commit on all files")
-            return 0
-
-    print("run-pre-commit FAILED: action does not run 'pre-commit run --all-files'")
-    return 1
+    runs = [step.get("run", "") for step in steps]
+    assert any("pre-commit run" in r and "--all-files" in r for r in runs), (
+        "action does not run 'pre-commit run --all-files'"
+    )
+    print("run-pre-commit OK: action runs pre-commit on all files")
 
 
-def main() -> int:
-    failures = 0
-    for check in (test_mise_python_version, test_action_uses_mise, test_action_runs_precommit_all_files):
-        if check() != 0:
-            failures += 1
-
-    if failures:
-        print(f"\nrun-pre-commit FAILED: {failures} check(s)")
-        return 1
-
+def test_all():
+    test_mise_python_version()
+    test_action_uses_mise()
+    test_action_runs_precommit_all_files()
     print("\nrun-pre-commit OK")
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    test_all()

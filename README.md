@@ -69,13 +69,41 @@ uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
 uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0.0.2
 ```
 
+## Development
+
+This repository uses [mise](https://mise.jdx.dev/) to pin development tools. Install mise, then run commands through it so you use the pinned Python version instead of the system interpreter:
+
+```bash
+mise install
+mise exec -- pip install -e ".[test]"
+mise exec -- pytest
+mise exec -- tox
+```
+
+The [`mise.toml`](mise.toml) file pins Python to 3.12. Do not use Python 3.9 for development or CI; `pyproject.toml` declares `requires-python = ">=3.10"` and `tox.ini` runs the matrix across 3.10, 3.11, and 3.12.
+
+### Running tests
+
+All invariant suites are pytest-collectable. To run the full suite:
+
+```bash
+mise exec -- pytest -v
+```
+
+To run the version matrix locally:
+
+```bash
+mise exec -- tox
+```
+
 ## Contributing
 
 When adding new workflows:
 1. Use `workflow_call` trigger for reusability
 2. Create a dedicated documentation file (see `docs/pr-check-and-bump.md` as example)
-3. Update this README to list the new workflow
-4. Test in a consumer repository before releasing
+3. Add or extend a pytest-collectable invariant suite in `tests/`
+4. Update this README to list the new workflow
+5. Test in a consumer repository before releasing
 
 ## Release
 

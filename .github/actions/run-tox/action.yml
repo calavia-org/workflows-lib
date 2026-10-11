@@ -1,0 +1,28 @@
+name: Run tox
+branding:
+  icon: check-circle
+  color: green
+description: |
+  Installs mise, resolves the Python version from mise.toml, installs tox, and
+  runs the configured tox environments. Used for the Python version matrix in CI.
+inputs:
+  args:
+    description: 'Extra arguments passed to tox'
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Install mise and tools
+      uses: jdx/mise-action@v2
+
+    - name: Install tox
+      shell: bash
+      run: |
+        mise exec -- pip install --upgrade pip
+        mise exec -- pip install tox
+
+    - name: Run tox
+      shell: bash
+      run: |
+        mise exec -- tox ${{ inputs.args }}

@@ -13,6 +13,11 @@ name: PR Check and Test
         type: boolean
         required: false
         default: true
+      run-tox:
+        description: 'Run tox Python version matrix'
+        type: boolean
+        required: false
+        default: true
       run-build:
         description: 'Run build step'
         type: boolean
@@ -265,6 +270,20 @@ jobs:
           custom-config: ${{ inputs.custom-pre-commit-config }}
           fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
           all-files: 'true'
+
+  tox:
+    name: Tox Matrix
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ inputs.run-tox }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/run-tox
+        with:
+          args: '-c ${{ inputs.tox-ini }}'
 
   # Unit tests are the mandatory gate for the code under test. Always runs, so a
   # skipped unit job still reports instead of vanishing.

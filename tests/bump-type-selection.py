@@ -286,5 +286,9 @@ def _indent(text: str, prefix: str = "      ") -> str:
     return "".join(prefix + line + "\n" for line in text.strip().splitlines())
 
 
+def test_main():
+    assert main() == 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
