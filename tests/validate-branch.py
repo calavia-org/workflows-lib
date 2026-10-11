@@ -86,6 +86,17 @@ CASES = [
         },
         "want": {"branch-valid": "true", "target-valid": "true", "should-bump": "true"},
     },
+    {
+        "name": "dependabot branch allowed",
+        "inputs": {
+            "branch": "dependabot/github_actions/github-actions-640176b5ab",
+            "allowed-branch-pattern": r"^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+",
+            "target-branch": "main",
+            "allowed-target-branches": "main,release/*",
+            "no-bump-branch-pattern": "",
+        },
+        "want": {"branch-valid": "true", "target-valid": "true", "should-bump": "true"},
+    },
 ]
 
 
