@@ -30,12 +30,12 @@ runs:
       shell: bash
       run: |
         CONFIG_PATH=""
-        
+
         # Check for custom config first
         if [ -n "${{ inputs.custom-config }}" ] && [ -f "${{ inputs.custom-config }}" ]; then
           CONFIG_PATH="${{ inputs.custom-config }}"
         fi
-        
+
         # Check for standard pre-commit config
         if [ -z "$CONFIG_PATH" ] && [ -f ".pre-commit-config.yaml" ]; then
           CONFIG_PATH=".pre-commit-config.yaml"
@@ -43,7 +43,7 @@ runs:
         if [ -z "$CONFIG_PATH" ] && [ -f ".pre-commit-config.yml" ]; then
           CONFIG_PATH=".pre-commit-config.yml"
         fi
-        
+
         # Technology-specific configs
         if [ -z "$CONFIG_PATH" ]; then
           case "${{ inputs.technology }}" in
@@ -79,7 +79,7 @@ runs:
               ;;
           esac
         fi
-        
+
         if [ -n "$CONFIG_PATH" ]; then
           echo "config_found=true" >> "$GITHUB_OUTPUT"
           echo "config_path=$CONFIG_PATH" >> "$GITHUB_OUTPUT"
@@ -132,13 +132,13 @@ runs:
       run: |
         CONFIG_PATH="${{ steps.detect-config.outputs.config_path }}"
         TECH="${{ inputs.technology }}"
-        
+
         if [ "${{ inputs.run-all-files }}" == "true" ]; then
           echo "Running pre-commit on all files..."
         else
           echo "Running pre-commit on changed files..."
         fi
-        
+
         case "$TECH" in
           python|ansible|generic)
             if [ -f "$CONFIG_PATH" ]; then
@@ -183,7 +183,7 @@ runs:
             fi
             ;;
         esac
-        
+
         # Run additional hooks if specified
         if [ -n "${{ inputs.additional-hooks }}" ]; then
           IFS=',' read -ra HOOKS <<< "${{ inputs.additional-hooks }}"

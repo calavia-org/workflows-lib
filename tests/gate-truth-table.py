@@ -12,11 +12,11 @@ Two GitHub rules are modelled:
      `unit=skipped`, indistinguishable from "tests disabled". The gate must
      disambiguate with explicit BUILD_RESULT / PACKAGE_RESULT checks.
 """
+
 import os
 import re
 import subprocess
 import sys
-import tempfile
 
 import yaml
 
@@ -106,7 +106,15 @@ def run_gate(script, results, env_exprs):
     return p.returncode == 0, p.stdout.strip()
 
 
-def run(jobs, defaults, fail_jobs, base_ref="main", prerelease=False, script=None, env_exprs=None):
+def run(
+    jobs,
+    defaults,
+    fail_jobs,
+    base_ref="main",
+    prerelease=False,
+    script=None,
+    env_exprs=None,
+):
     results = {}
     for name in topo(jobs):
         cond = jobs[name].get("if")
@@ -163,9 +171,7 @@ def main():
         if token not in script:
             print(f"FAIL: gate script never reads {token}")
             return 1
-        asserted = any(
-            token in cond and "FAILED=1" in body for cond, body in blocks
-        )
+        asserted = any(token in cond and "FAILED=1" in body for cond, body in blocks)
         if not asserted:
             print(f"FAIL: {token} is read but never sets FAILED=1")
             return 1
@@ -181,7 +187,9 @@ def main():
 
     def scenario(label, fail_jobs, expect_pass, **over):
         nonlocal ok_all
-        results = run(jobs, dict(defaults, **over), fail_jobs, script=script, env_exprs=env_exprs)
+        results = run(
+            jobs, dict(defaults, **over), fail_jobs, script=script, env_exprs=env_exprs
+        )
         passed, out = run_gate(script, results, env_exprs)
         good = passed == expect_pass
         ok_all &= good
@@ -210,17 +218,37 @@ def main():
         env_exprs=env_exprs,
     )
     for label, good, detail in (
-        ("unit still runs when pre-commit fails", r["unit"] == "success", f"unit={r['unit']}"),
-        ("gate fails on pre-commit alone", r["report"] == "failure", f"report={r['report']}"),
+        (
+            "unit still runs when pre-commit fails",
+            r["unit"] == "success",
+            f"unit={r['unit']}",
+        ),
+        (
+            "gate fails on pre-commit alone",
+            r["report"] == "failure",
+            f"report={r['report']}",
+        ),
     ):
         ok_all &= good
         print(f"  {'ok ' if good else 'FAIL'} {label:<36} {detail}")
 
     print("\npackage waits for build without breaking a disabled build:")
     for label, over, fail, want_pkg, want_gate in (
-        ("build disabled, package runs", {"run_build": False}, set(), "success", "success"),
+        (
+            "build disabled, package runs",
+            {"run_build": False},
+            set(),
+            "success",
+            "success",
+        ),
         ("build enabled and green", {"run_build": True}, set(), "success", "success"),
-        ("build fails, package skips", {"run_build": True}, {"build"}, "skipped", "failure"),
+        (
+            "build fails, package skips",
+            {"run_build": True},
+            {"build"},
+            "skipped",
+            "failure",
+        ),
     ):
         r = run(
             jobs,
@@ -264,10 +292,20 @@ def main():
         ("base=release/*", "release/1.8.0", set(), "success"),
         ("red gate", "release/1.8.0", {"unit"}, "skipped"),
     ):
-        r = run(jobs, dict(defaults, **{"run-package": True}), fail, base, prerelease=True, script=script, env_exprs=env_exprs)
+        r = run(
+            jobs,
+            dict(defaults, **{"run-package": True}),
+            fail,
+            base,
+            prerelease=True,
+            script=script,
+            env_exprs=env_exprs,
+        )
         good = r["pre-release"] == want
         ok_all &= good
-        print(f"  {'ok ' if good else 'FAIL'} {label:<36} pre-release={r['pre-release']} (expected {want})")
+        print(
+            f"  {'ok ' if good else 'FAIL'} {label:<36} pre-release={r['pre-release']} (expected {want})"
+        )
 
     print("\nall scenarios correct" if ok_all else "\nscenario errors found")
     return 0 if ok_all else 1
@@ -275,6 +313,7 @@ def main():
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

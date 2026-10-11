@@ -107,7 +107,7 @@ runs:
       run: |
         TECH="${{ inputs.technology }}"
         echo "Setting up test environment for: $TECH"
-        
+
         # Setup based on technology
         case "$TECH" in
           python|ansible)
@@ -193,14 +193,14 @@ runs:
       run: |
         TECH="${{ inputs.technology }}"
         CMD="${{ inputs.test-command }}"
-        
+
         # If custom command provided, use it
         if [ -n "$CMD" ]; then
           echo "command=$CMD" >> "$GITHUB_OUTPUT"
           echo "Using custom test command: $CMD"
           exit 0
         fi
-        
+
         # Technology-specific defaults
         case "$TECH" in
           python)
@@ -262,7 +262,7 @@ runs:
             fi
             ;;
         esac
-        
+
         if [ -n "$CMD" ]; then
           echo "command=$CMD" >> "$GITHUB_OUTPUT"
           echo "Using default test command: $CMD"
@@ -277,31 +277,31 @@ runs:
       run: |
         echo "Running unit tests..."
         CMD="${{ steps.test-cmd.outputs.command }}"
-        
+
         # Add test paths if specified
         if [ -n "${{ inputs.test-paths }}" ]; then
           CMD="$CMD ${{ inputs.test-paths }}"
         fi
-        
+
         # Add extra args
         if [ -n "${{ inputs.extra-args }}" ]; then
           CMD="$CMD ${{ inputs.extra-args }}"
         fi
-        
+
         # Add coverage for Python (tox handles its own args)
         if [ "${{ inputs.technology }}" == "python" ] || [ "${{ inputs.technology }}" == "ansible" ]; then
           if [ "${{ inputs.coverage-report }}" == "true" ] && [[ "$CMD" != *"tox"* ]]; then
             CMD="$CMD --cov=. --cov-report=${{ inputs.coverage-format }}"
           fi
         fi
-        
+
         # Add coverage for Node.js
         if [ "${{ inputs.technology }}" == "nodejs" ]; then
           if [ "${{ inputs.coverage-report }}" == "true" ]; then
             CMD="$CMD --coverage"
           fi
         fi
-        
+
         # Add test output format (skip for tox)
         if [ "${{ inputs.test-report-format }}" == "junit" ]; then
           case "${{ inputs.technology }}" in
@@ -323,7 +323,7 @@ runs:
               ;;
           esac
         fi
-        
+
         echo "Executing: $CMD"
         eval $CMD
         echo "Unit tests completed"
@@ -334,14 +334,14 @@ runs:
       run: |
         echo "Running integration tests..."
         TECH="${{ inputs.technology }}"
-        
+
         # Use custom integration command if provided
         if [ -n "${{ inputs.integration-test-command }}" ]; then
           echo "Using custom integration test command: ${{ inputs.integration-test-command }}"
           eval "${{ inputs.integration-test-command }}"
           exit 0
         fi
-        
+
         case "$TECH" in
           python)
             if [ -f "${{ inputs.tox-ini }}" ]; then
@@ -392,7 +392,7 @@ runs:
       run: |
         echo "Running e2e tests..."
         TECH="${{ inputs.technology }}"
-        
+
         case "$TECH" in
           nodejs)
             if [ -f "package.json" ] && grep -q '"e2e"' package.json; then

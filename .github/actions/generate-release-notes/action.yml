@@ -25,7 +25,7 @@ runs:
       run: |
         VERSION="${{ inputs.version }}"
         SINCE="${{ inputs.since }}"
-        
+
         # Get commits since last tag
         if [ -n "$SINCE" ]; then
           COMMITS=$(git log "$SINCE"..HEAD --pretty=format:"%s (%h)" --no-merges)
@@ -37,7 +37,7 @@ runs:
             COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges)
           fi
         fi
-        
+
         # Parse conventional commits
         FEATURES=""
         FIXES=""
@@ -46,7 +46,7 @@ runs:
         BUILD=""
         SECURITY=""
         BREAKING=""
-        
+
         while IFS= read -r commit; do
           if echo "$commit" | grep -q "^feat:"; then
             FEATURES="$FEATURES\n- $commit"
@@ -61,16 +61,16 @@ runs:
           elif echo "$commit" | grep -q "^security:"; then
             SECURITY="$SECURITY\n- $commit"
           fi
-          
+
           if echo "$commit" | grep -q "BREAKING CHANGE"; then
             BREAKING="$BREAKING\n- $commit"
           fi
         done <<< "$COMMITS"
-        
+
         # Build markdown
         NOTES="# Release v$VERSION\n\n"
         NOTES="$NOTES## What's Changed\n\n"
-        
+
         if [ -n "$FEATURES" ]; then
           NOTES="$NOTES### 🚀 Features\n$FEATURES\n\n"
         fi
@@ -92,9 +92,9 @@ runs:
         if [ -n "$BREAKING" ]; then
           NOTES="$NOTS### 💥 Breaking Changes\n$BREAKING\n\n"
         fi
-        
+
         echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
-        
+
         # Write to file for debugging
         echo "$NOTES" > RELEASE_NOTES.md
         echo "✅ Release notes generated"

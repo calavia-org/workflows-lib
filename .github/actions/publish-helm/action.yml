@@ -30,26 +30,26 @@ runs:
         CHART="${{ inputs.chart-path }}"
         REPO="${{ inputs.chart-repo }}"
         BRANCH="${{ inputs.repo-branch }}"
-        
+
         if [ ! -f "$CHART" ]; then
           echo "❌ Chart not found: $CHART"
           exit 1
         fi
-        
+
         # Clone chart repo
         git clone --branch "$BRANCH" "$REPO" chart-repo || mkdir -p chart-repo
-        
+
         # Copy chart to repo
         cp "$CHART" chart-repo/
-        
+
         # Generate index
         cd chart-repo
         helm repo index . --url "$REPO"
-        
+
         # Commit and push
         git add .
         git -c user.name="GitHub Actions" -c user.email="actions@github.com" commit -m "Add chart $(basename $CHART)"
         git push origin "$BRANCH"
-        
+
         echo "chart-url=$REPO/$(basename $CHART)" >> "$GITHUB_OUTPUT"
         echo "✅ Chart published to $REPO"

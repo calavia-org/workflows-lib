@@ -73,14 +73,14 @@ runs:
           resolve_pre_release
           exit 0
         fi
-        
+
         ARTIFACTS=""
-        
+
         # Check for execution-environment.yml (Ansible EE - distinct from Docker)
         if [ -f "execution-environment.yml" ] || [ -f "execution-environment.yaml" ]; then
           ARTIFACTS="execution-environment"
         fi
-        
+
         # Check for Dockerfile (only if not an EE - Docker and EE are mutually exclusive)
         if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
           if [ -n "$ARTIFACTS" ]; then
@@ -89,7 +89,7 @@ runs:
             ARTIFACTS="docker"
           fi
         fi
-        
+
         # Check for Helm chart
         if [ -f "Chart.yml" ] || [ -f "chart.yml" ] || [ -d "helm" ] || [ -d "charts" ]; then
           if [ -n "$ARTIFACTS" ]; then
@@ -98,7 +98,7 @@ runs:
             ARTIFACTS="helm"
           fi
         fi
-        
+
         # Check for binary artifacts
         if [ -f "pom.xml" ] || [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
           BINARY_TYPE="java"
@@ -115,7 +115,7 @@ runs:
         elif [ -f "Makefile" ] || [ -f "VERSION" ] || [ -f "version.txt" ]; then
           BINARY_TYPE="generic"
         fi
-        
+
         if [ -n "$BINARY_TYPE" ]; then
           if [ -n "$ARTIFACTS" ]; then
             ARTIFACTS="binary,$ARTIFACTS"
@@ -123,7 +123,7 @@ runs:
             ARTIFACTS="binary"
           fi
         fi
-        
+
         if [ -n "$ARTIFACTS" ]; then
           echo "artifacts=$ARTIFACTS" >> "$GITHUB_OUTPUT"
           echo "binary-type=$BINARY_TYPE" >> "$GITHUB_OUTPUT"

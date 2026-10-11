@@ -17,6 +17,7 @@ the second derive 1.7.1 -> 1.7.2 against an already-bumped version file,
 produce an empty diff, and ship no version bump at all. `base-version-source:
 file` exists so the published version file, not the lagging tag, is the base.
 """
+
 import os
 import re
 import subprocess
@@ -99,12 +100,9 @@ def derive(tags, base="main", source="tag", version_file=None, file_body=None):
             f"export BASE_BRANCH={base}\n"
             f"export SOURCE={source_value}\n"
             f"export FALLBACK=0.0.0\n"
-            f"cd {repo}\n"
-            + script
+            f"cd {repo}\n" + script
         )
-        proc = subprocess.run(
-            ["bash", "-c", full], capture_output=True, text=True
-        )
+        proc = subprocess.run(["bash", "-c", full], capture_output=True, text=True)
         got = None
         try:
             with open(env_out) as fh:
@@ -128,8 +126,7 @@ def forward_guard(base_version, new_version):
         "set -e\n"
         "FILE=v.txt; TYPE=patch\n"
         f"export BASE_VERSION={base_version}\n"
-        f"export NEW_VERSION={new_version}\n"
-        + script
+        f"export NEW_VERSION={new_version}\n" + script
     )
     proc = subprocess.run(["bash", "-c", full], capture_output=True, text=True)
     return proc.returncode != 0, proc.stdout + proc.stderr
@@ -138,8 +135,11 @@ def forward_guard(base_version, new_version):
 CASES = [
     # (tags, expected, why) — BASE_BRANCH is bare, as github.base_ref supplies it
     (["v1.7.0", "v1.7.1"], "1.7.1", "highest release tag wins"),
-    (["v1.6.0", "v1.7.1", "v0.0.0-pr.54", "v0.0.0-pr.60"], "1.7.1",
-     "REGRESSION: prerelease tags must not win over release tags"),
+    (
+        ["v1.6.0", "v1.7.1", "v0.0.0-pr.54", "v0.0.0-pr.60"],
+        "1.7.1",
+        "REGRESSION: prerelease tags must not win over release tags",
+    ),
     (["v0.0.0-pr.54"], "0.0.0", "only prerelease tags → 0.0.0 fallback"),
     ([], "0.0.0", "no tags at all → 0.0.0 fallback"),
     (["v2.0.0-rc.1", "v1.9.0"], "1.9.0", "non -pr. suffixes ignored too"),
@@ -150,7 +150,12 @@ GUARDS = [
     ("1.7.1", "1.7.2", False, "patch bump is a forward move"),
     ("1.7.1", "1.8.0", False, "minor bump is a forward move"),
     ("1.7.1", "1.7.1", True, "no-op bump must be refused"),
-    ("0.0.0-pr.54", "0.0.1", True, "REGRESSION: 0.0.1 from a prerelease base must be refused"),
+    (
+        "0.0.0-pr.54",
+        "0.0.1",
+        True,
+        "REGRESSION: 0.0.1 from a prerelease base must be refused",
+    ),
     ("1.7.1", "0.0.1", True, "REGRESSION: downgrade must be refused"),
 ]
 
@@ -173,32 +178,89 @@ BARE = "VERSION"
 
 # (tags, version_file, file_version, expect_version, expect_rc, why)
 FILE_CASES = [
-    (["v1.7.1"], VF, "1.7.2", "1.7.2", 0,
-     "REGRESSION: file ahead of tag (unreleased bump) must win over the tag"),
-    (["v1.7.1"], VF, "1.7.1", "1.7.1", 0,
-     "file and tag agree"),
-    ([], VF, "1.0.0", "1.0.0", 0,
-     "no tags at all, file present → use file, never the 0.0.0 fallback"),
-    (["v1.7.1"], VF, "1.7.10", "1.7.10", 0,
-     "file version wins even when a higher tag exists (file is the truth)"),
-    (["v1.7.1"], VF, "9.9.9-rc.1", None, 1,
-     "non-clean X.Y.Z version must be rejected, not silently bumped"),
-    (["v1.7.1"], "missing/galaxy.yml", "1.7.2", None, 1,
-     "missing version file must fail loudly"),
-    (["v1.7.1"], "", "1.7.2", None, 1,
-     "empty version-file must be rejected"),
-    (["v1.7.1"], BARE, "1.7.2", "1.7.2", 0,
-     "REGRESSION: bare VERSION must resolve, same as a keyed file"),
-    (["v1.7.1"], BARE, "1.7.1", "1.7.1", 0,
-     "bare file and tag agree"),
-    ([], BARE, "1.0.0", "1.0.0", 0,
-     "no tags, bare file present → use file, never the 0.0.0 fallback"),
-    (["v1.9.0"], BARE, "1.7.10", "1.7.10", 0,
-     "REGRESSION: bare file wins over a higher tag, as keyed does"),
-    (["v1.7.1"], BARE, "9.9.9-rc.1", None, 1,
-     "REGRESSION: non-clean bare version must be rejected, not bumped"),
-    (["v1.7.1"], "missing/VERSION", "1.7.2", None, 1,
-     "missing bare version file must fail loudly"),
+    (
+        ["v1.7.1"],
+        VF,
+        "1.7.2",
+        "1.7.2",
+        0,
+        "REGRESSION: file ahead of tag (unreleased bump) must win over the tag",
+    ),
+    (["v1.7.1"], VF, "1.7.1", "1.7.1", 0, "file and tag agree"),
+    (
+        [],
+        VF,
+        "1.0.0",
+        "1.0.0",
+        0,
+        "no tags at all, file present → use file, never the 0.0.0 fallback",
+    ),
+    (
+        ["v1.7.1"],
+        VF,
+        "1.7.10",
+        "1.7.10",
+        0,
+        "file version wins even when a higher tag exists (file is the truth)",
+    ),
+    (
+        ["v1.7.1"],
+        VF,
+        "9.9.9-rc.1",
+        None,
+        1,
+        "non-clean X.Y.Z version must be rejected, not silently bumped",
+    ),
+    (
+        ["v1.7.1"],
+        "missing/galaxy.yml",
+        "1.7.2",
+        None,
+        1,
+        "missing version file must fail loudly",
+    ),
+    (["v1.7.1"], "", "1.7.2", None, 1, "empty version-file must be rejected"),
+    (
+        ["v1.7.1"],
+        BARE,
+        "1.7.2",
+        "1.7.2",
+        0,
+        "REGRESSION: bare VERSION must resolve, same as a keyed file",
+    ),
+    (["v1.7.1"], BARE, "1.7.1", "1.7.1", 0, "bare file and tag agree"),
+    (
+        [],
+        BARE,
+        "1.0.0",
+        "1.0.0",
+        0,
+        "no tags, bare file present → use file, never the 0.0.0 fallback",
+    ),
+    (
+        ["v1.9.0"],
+        BARE,
+        "1.7.10",
+        "1.7.10",
+        0,
+        "REGRESSION: bare file wins over a higher tag, as keyed does",
+    ),
+    (
+        ["v1.7.1"],
+        BARE,
+        "9.9.9-rc.1",
+        None,
+        1,
+        "REGRESSION: non-clean bare version must be rejected, not bumped",
+    ),
+    (
+        ["v1.7.1"],
+        "missing/VERSION",
+        "1.7.2",
+        None,
+        1,
+        "missing bare version file must fail loudly",
+    ),
 ]
 
 
@@ -209,7 +271,9 @@ def main():
     for tags, expected, why in CASES:
         got, _, log = derive(tags)
         ok = got == expected
-        print(f"  {'PASS' if ok else 'FAIL'}  expect={expected:<8} got={str(got):<8} {why}")
+        print(
+            f"  {'PASS' if ok else 'FAIL'}  expect={expected:<8} got={str(got):<8} {why}"
+        )
         if not ok:
             failures.append(f"derivation {tags}: expected {expected}, got {got}")
             print(log)
@@ -222,20 +286,30 @@ def main():
             body = GALAXY.format(version=fv)
         else:
             body = None
-        got, actual_rc, log = derive(tags, source="file", version_file=vf, file_body=body)
+        got, actual_rc, log = derive(
+            tags, source="file", version_file=vf, file_body=body
+        )
         ok = got == expected and actual_rc == rc
-        print(f"  {'PASS' if ok else 'FAIL'}  expect={str(expected):<8} rc={rc}  got={str(got):<8} rc={actual_rc}  {why}")
+        print(
+            f"  {'PASS' if ok else 'FAIL'}  expect={str(expected):<8} rc={rc}  got={str(got):<8} rc={actual_rc}  {why}"
+        )
         if not ok:
-            failures.append(f"file source {vf} @ {fv}: expected {expected}/rc{rc}, got {got}/rc{actual_rc}")
+            failures.append(
+                f"file source {vf} @ {fv}: expected {expected}/rc{rc}, got {got}/rc{actual_rc}"
+            )
             print(log)
 
     print("\nforward-move guard")
     for base_v, new_v, should_refuse, why in GUARDS:
         refused, log = forward_guard(base_v, new_v)
         ok = refused == should_refuse
-        print(f"  {'PASS' if ok else 'FAIL'}  {base_v} → {new_v}  refuse={refused} (want {should_refuse})  {why}")
+        print(
+            f"  {'PASS' if ok else 'FAIL'}  {base_v} → {new_v}  refuse={refused} (want {should_refuse})  {why}"
+        )
         if not ok:
-            failures.append(f"guard {base_v}->{new_v}: expected refuse={should_refuse}, got {refused}")
+            failures.append(
+                f"guard {base_v}->{new_v}: expected refuse={should_refuse}, got {refused}"
+            )
             print(log)
 
     total = len(CASES) + len(FILE_CASES) + len(GUARDS)

@@ -29,14 +29,23 @@ def extract_step_script() -> str:
     raise KeyError("step resolve not found")
 
 
-def run_action(*, source: str, version_file_content: str | None = None, tags: list[str] | None = None) -> dict[str, str]:
+def run_action(
+    *,
+    source: str,
+    version_file_content: str | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, str]:
     script = extract_step_script()
 
     with tempfile.TemporaryDirectory() as repo_dir:
         repo = Path(repo_dir)
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"], cwd=repo, check=True
+        )
 
         if version_file_content is not None:
             (repo / "VERSION").write_text(version_file_content)
@@ -146,6 +155,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

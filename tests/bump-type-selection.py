@@ -76,7 +76,7 @@ def select_bump(
     # with a direct assignment so the test can feed synthetic commits without
     # relying on git log.
     script = re.sub(
-        r'^if git rev-parse.*?^fi\n',
+        r"^if git rev-parse.*?^fi\n",
         lambda m: (
             "COMMITS=$(cat <<'__COMMITS__'\n"
             + "".join(f"{c}\n" for c in commits)
@@ -109,8 +109,7 @@ def select_bump(
             f"export PR_TITLE={pr_title!r}\n"
             f"export REQUIRE_CONVENTIONAL={require_conventional}\n"
             f"export DEFAULT_BUMP=patch\n"
-            f"cd {repo}\n"
-            + script
+            f"cd {repo}\n" + script
         )
         proc = subprocess.run(["bash", "-c", full], capture_output=True, text=True)
         bump = _read_bump_type(out, proc.stdout + proc.stderr)
@@ -149,8 +148,20 @@ CASES = [
     ),
     (["feat(api): add thing"], "", "true", "minor", "a lone feature is a minor bump"),
     (["fix(api): repair thing"], "", "true", "patch", "a lone fix is a patch bump"),
-    (["chore: tidy deps"], "", "true", "patch", "chore is conventional and bumps patch"),
-    (["docs: correct prose"], "", "true", "patch", "docs is conventional and bumps patch"),
+    (
+        ["chore: tidy deps"],
+        "",
+        "true",
+        "patch",
+        "chore is conventional and bumps patch",
+    ),
+    (
+        ["docs: correct prose"],
+        "",
+        "true",
+        "patch",
+        "docs is conventional and bumps patch",
+    ),
     (["refactor: tidy internals"], "", "true", "patch", "refactor is conventional"),
     (["test: add cases"], "", "true", "patch", "test is conventional"),
     (["ci: adjust workflow"], "", "true", "patch", "ci is conventional"),
@@ -278,7 +289,9 @@ def main() -> int:
     )
     if failures:
         return 1
-    print("bump-type selection OK (single-type, mixed-type precedence, breaking changes, title fallback)")
+    print(
+        "bump-type selection OK (single-type, mixed-type precedence, breaking changes, title fallback)"
+    )
     return 0
 
 

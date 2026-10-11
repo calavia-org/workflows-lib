@@ -42,30 +42,30 @@ runs:
         APP_VERSION="${{ inputs.app-version }}"
         IMAGE_NAME="${{ inputs.image-name }}"
         IMAGE_TAG="${{ inputs.image-tag }}"
-        
+
         if [ ! -d "$CHART_DIR" ]; then
           echo "❌ Chart directory not found: $CHART_DIR"
           exit 1
         fi
-        
+
         # Update chart version and appVersion
         if [ -f "$CHART_DIR/Chart.yaml" ]; then
           sed -i "s/^version: .*/version: $VERSION/" "$CHART_DIR/Chart.yaml"
           sed -i "s/^appVersion: .*/appVersion: \"$APP_VERSION\"/" "$CHART_DIR/Chart.yaml"
         fi
-        
+
         # Update image repository and tag in values.yaml if provided
         if [ -n "$IMAGE_NAME" ] && [ -f "$CHART_DIR/values.yaml" ]; then
           sed -i "s|repository: .*|repository: ghcr.io/$IMAGE_NAME|" "$CHART_DIR/values.yaml"
           sed -i "s|tag: .*|tag: \"$IMAGE_TAG\"|" "$CHART_DIR/values.yaml"
         fi
-        
+
         # Package the chart
         helm package "$CHART_DIR" --version "$VERSION"
-        
+
         CHART_FILE=$(ls *.tgz | head -1)
         CHART_NAME=$(basename "$CHART_FILE" .tgz)
-        
+
         echo "chart-path=$CHART_FILE" >> "$GITHUB_OUTPUT"
         echo "chart-name=$CHART_NAME" >> "$GITHUB_OUTPUT"
         echo "✅ Built Helm chart: $CHART_NAME-$VERSION.tgz"

@@ -29,7 +29,14 @@ def extract_step_script() -> str:
     raise KeyError("step verify not found")
 
 
-def run_action(*, unit="success", integration="skipped", build="success", package="success", pre_commit="success") -> tuple[int, dict[str, str]]:
+def run_action(
+    *,
+    unit="success",
+    integration="skipped",
+    build="success",
+    package="success",
+    pre_commit="success",
+) -> tuple[int, dict[str, str]]:
     script = extract_step_script()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -121,7 +128,9 @@ def main() -> int:
         params.update(case["results"])
         rc, outputs = run_action(**params)
         if rc != case["want_rc"]:
-            failures.append(f"{case['name']}: expected exit {case['want_rc']}, got {rc}")
+            failures.append(
+                f"{case['name']}: expected exit {case['want_rc']}, got {rc}"
+            )
         got_passed = outputs.get("passed", "")
         if got_passed != case["want_passed"]:
             failures.append(
@@ -140,6 +149,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

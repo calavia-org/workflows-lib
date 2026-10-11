@@ -85,8 +85,7 @@ def run_guard(script, repo, version_file="VERSION"):
             f"export GITHUB_OUTPUT={env_out}\n"
             f"export BASE_BRANCH=main\n"
             f"export VERSION_FILE_INPUT={version_file}\n"
-            f"cd {repo}\n"
-            + script
+            f"cd {repo}\n" + script
         )
         proc = subprocess.run(["bash", "-c", full], capture_output=True, text=True)
         try:

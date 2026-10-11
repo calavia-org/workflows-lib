@@ -46,7 +46,10 @@ CASES: dict[str, tuple[dict[str, str], dict[str, str]]] = {
         {"galaxy.yml": GALAXY_YML},
         {"primary": "ansible", "ansible-collection": "galaxy.yml"},
     ),
-    "python": ({"pyproject.toml": ""}, {"primary": "python", "python": "pyproject.toml"}),
+    "python": (
+        {"pyproject.toml": ""},
+        {"primary": "python", "python": "pyproject.toml"},
+    ),
     "go": ({"go.mod": ""}, {"primary": "go", "go": "go.mod"}),
     "rust": ({"Cargo.toml": ""}, {"primary": "rust", "rust": "Cargo.toml"}),
     "java": ({"pom.xml": ""}, {"primary": "java", "java": "pom.xml"}),
@@ -56,7 +59,10 @@ CASES: dict[str, tuple[dict[str, str], dict[str, str]]] = {
         {"primary": "docker"},
     ),
     "helm": ({"Chart.yml": ""}, {"primary": "generic", "helm": "Chart.yml"}),
-    "generic-makefile": ({"Makefile": ""}, {"primary": "generic", "generic": "Makefile"}),
+    "generic-makefile": (
+        {"Makefile": ""},
+        {"primary": "generic", "generic": "Makefile"},
+    ),
     "empty": ({}, {"primary": "generic", "count": "0"}),
     # ansible outranks every other signal, matching the precedence the consumer
     # previously relied on from its own local detector
@@ -70,7 +76,10 @@ CASES: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     ),
     "execution-environment": (
         {"execution-environment.yml": ""},
-        {"primary": "generic", "ansible-execution-environment": "execution-environment.yml"},
+        {
+            "primary": "generic",
+            "ansible-execution-environment": "execution-environment.yml",
+        },
     ),
 }
 
@@ -133,6 +142,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

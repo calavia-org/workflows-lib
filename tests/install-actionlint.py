@@ -67,7 +67,9 @@ def run_action(*, version: str) -> tuple[int, str, str]:
                     capture_output=True,
                     text=True,
                 )
-                installed_version = ver_result.stdout.strip().split()[0] if ver_result.stdout else ""
+                installed_version = (
+                    ver_result.stdout.strip().split()[0] if ver_result.stdout else ""
+                )
         finally:
             os.unlink(script_path)
 
@@ -98,6 +100,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

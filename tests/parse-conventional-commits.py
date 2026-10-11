@@ -115,7 +115,11 @@ def main() -> int:
         {
             "name": "breaking only",
             "commits": ["feat!: remove v1"],
-            "want": {"bump_type": "major", "has_conventional": "true", "breaking": "true"},
+            "want": {
+                "bump_type": "major",
+                "has_conventional": "true",
+                "breaking": "true",
+            },
         },
         {
             "name": "fix and feat yields minor",
@@ -125,7 +129,11 @@ def main() -> int:
         {
             "name": "feat and breaking yields major",
             "commits": ["feat: feature", "refactor!: drop old api"],
-            "want": {"bump_type": "major", "has_conventional": "true", "breaking": "true"},
+            "want": {
+                "bump_type": "major",
+                "has_conventional": "true",
+                "breaking": "true",
+            },
         },
         {
             "name": "non-conventional defaults to patch",
@@ -142,7 +150,11 @@ def main() -> int:
             "name": "pr title breaking fallback",
             "commits": [],
             "pr_title": "fix!: breaking fix",
-            "want": {"bump_type": "major", "has_conventional": "true", "breaking": "true"},
+            "want": {
+                "bump_type": "major",
+                "has_conventional": "true",
+                "breaking": "true",
+            },
         },
     ]
 
@@ -171,6 +183,7 @@ def main() -> int:
 
 def test_main():
     assert main() == 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

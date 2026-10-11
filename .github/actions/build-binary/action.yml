@@ -85,7 +85,7 @@ runs:
         VERSION="${{ inputs.version }}"
         ARTIFACT_PATH=""
         ARTIFACT_NAME=""
-        
+
         # Use custom command if provided
         if [ -n "${{ inputs.build-command }}" ]; then
           echo "Running custom build command..."
@@ -94,7 +94,7 @@ runs:
           echo "artifact-name=custom" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        
+
         case "$TECH" in
           java)
             if [ -f "pom.xml" ]; then
@@ -155,7 +155,7 @@ runs:
             ARTIFACT_NAME="${{ github.repository }}-${{ inputs.version }}"
             ;;
         esac
-        
+
         if [ -n "$ARTIFACT_PATH" ]; then
           echo "artifact-path=$ARTIFACT_PATH" >> "$GITHUB_OUTPUT"
           echo "artifact-name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
