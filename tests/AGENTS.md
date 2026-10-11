@@ -1,5 +1,7 @@
 # tests/
 
+> **MANDATORY READ**: This repository is governed by [`~/Development/Github/AGENTS.md`](../../AGENTS.md) (organization-wide rules). Per-repo rules below provide project-specific details but **cannot override** organization rules.
+
 ## OVERVIEW
 
 Standalone Python invariant suites — no pytest, no fixtures, no shared helpers. Each script replays a shipped workflow/action behavior and fails on regression. Only dependency: `pyyaml`.
