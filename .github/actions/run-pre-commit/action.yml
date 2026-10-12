@@ -61,7 +61,16 @@ runs:
       run: |
         mise exec -- pip install --upgrade pip
         mise exec -- pip install pre-commit
-        mise exec -- pip install -e ".[test]"
+        # Install the repo's own packaging + `test` extra so any local
+        # `language: system` hooks can resolve local imports. Only repos WITH
+        # packaging metadata can be installed editable; bare Ansible collections
+        # and other non-Python repos have none, and an unconditional
+        # `pip install -e ".[test]"` fails the whole job there.
+        if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
+          mise exec -- pip install -e ".[test]"
+        else
+          echo "No pyproject.toml/setup.py/setup.cfg at repo root; skipping editable install."
+        fi
 
     - name: Run pre-commit
       if: steps.detect-config.outputs.config_found == 'true'

@@ -72,10 +72,24 @@ def test_action_runs_precommit_all_files():
     print("run-pre-commit OK: action runs pre-commit on all files")
 
 
+def test_action_guards_editable_install():
+    steps = action_steps()
+    runs = "\n".join(step.get("run", "") for step in steps)
+    assert 'pip install -e ".[test]"' in runs, (
+        "action no longer installs the repo's own [test] extra"
+    )
+    assert "pyproject.toml" in runs and "setup.py" in runs, (
+        "editable install is not guarded by a packaging-file check; non-Python "
+        "repos (e.g. bare Ansible collections) would fail the whole job"
+    )
+    print("run-pre-commit OK: editable install is guarded by packaging-file presence")
+
+
 def test_all():
     test_mise_python_version()
     test_action_uses_mise()
     test_action_runs_precommit_all_files()
+    test_action_guards_editable_install()
     print("\nrun-pre-commit OK")
 
 
