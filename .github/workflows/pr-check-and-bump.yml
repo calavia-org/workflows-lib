@@ -58,7 +58,7 @@ jobs:
 
       - name: Validate branch
         id: validate
-        uses: ./.github/actions/validate-branch
+        uses: $/.github/actions/validate-branch
         with:
           branch: ${{ github.head_ref }}
           allowed-branch-pattern: ${{ inputs.allowed-branch-pattern }}
@@ -86,7 +86,7 @@ jobs:
 
       - name: Parse conventional commits
         id: parse
-        uses: ./.github/actions/parse-conventional-commits
+        uses: $/.github/actions/parse-conventional-commits
         with:
           base-branch: ${{ github.base_ref }}
           pr-title: ${{ github.event.pull_request.title }}
@@ -126,14 +126,14 @@ jobs:
 
       - name: Resolve base version
         id: base
-        uses: ./.github/actions/resolve-base-version
+        uses: $/.github/actions/resolve-base-version
         with:
           version-file-source: ${{ inputs.base-version-source == 'file' && inputs.version-file || inputs.base-version-source }}
           base-branch: ${{ github.base_ref }}
 
       - name: Bump version using custom action
         id: bump
-        uses: ./.github/actions/bump-version
+        uses: $/.github/actions/bump-version
         with:
           bump-type: ${{ needs.check-pr.outputs.bump_type }}
           current-version: ${{ steps.base.outputs.version }}
@@ -153,7 +153,7 @@ jobs:
       - name: Check if already bumped
         id: last_commit
         if: ${{ steps.changes.outputs.changed == 'true' }}
-        uses: ./.github/actions/check-already-bumped
+        uses: $/.github/actions/check-already-bumped
         with:
           version-file: ${{ steps.bump.outputs.version-file }}
           base-branch: ${{ github.base_ref }}
