@@ -183,3 +183,10 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/pr-check-and-test\.yml|tests/verify-required-tests-passed\.py)$'
+
+      - id: local-action-refs
+        name: verify reusable workflows reference their own actions via $/ not ./
+        entry: pytest tests/local-action-refs.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/.*\.ya?ml|tests/local-action-refs\.py)$'
