@@ -22,7 +22,7 @@ jobs:
   pr-check-and-test:
     name: PR Check and Test
     permissions:
-      contents: read
+      contents: write
       checks: write
       pull-requests: write
       security-events: write
