@@ -19,10 +19,13 @@ runs:
     - name: Install tox
       shell: bash
       run: |
-        mise exec -- pip install --upgrade pip
-        mise exec -- pip install tox
+        # The mise-provided Python is externally managed (PEP 668), so install
+        # tox into a local venv rather than the system/managed environment.
+        mise exec -- python -m venv .venv-tox
+        .venv-tox/bin/pip install --upgrade pip
+        .venv-tox/bin/pip install tox
 
     - name: Run tox
       shell: bash
       run: |
-        mise exec -- tox ${{ inputs.args }}
+        .venv-tox/bin/tox ${{ inputs.args }}
