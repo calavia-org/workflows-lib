@@ -13,11 +13,6 @@ name: PR Check and Test
         type: boolean
         required: false
         default: true
-      run-tox:
-        description: 'Run tox Python version matrix'
-        type: boolean
-        required: false
-        default: true
       run-build:
         description: 'Run build step'
         type: boolean
@@ -305,20 +300,6 @@ jobs:
           custom-config: ${{ inputs.custom-pre-commit-config }}
           fail-on-missing: ${{ inputs.pre-commit-fail-on-missing }}
           all-files: 'true'
-
-  tox:
-    name: Tox Matrix
-    needs: detect
-    runs-on: ${{ inputs.runner-label }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-tox }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: $/.github/actions/run-tox
-        with:
-          args: '-c ${{ inputs.tox-ini }}'
 
   # Security scans are a standalone quality gate. They run in parallel with the
   # build/test phases and feed into the final report gate. The job needs

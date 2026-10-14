@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Verify self-bump admits Dependabot branches and still bumps them.
+"""Verify the internal PR caller admits Dependabot branches and still bumps them.
 
 workflows-lib versions itself through `pr-check-and-bump.yml` (see
-`.github/workflows/self-bump.yml`). That call sets `fail-on-invalid-branch:
-true`, so a branch missing from `allowed-branch-pattern` makes the whole
-"PR Check and Auto-Bump" check go red — exactly what happened for
+`.github/workflows/pr.yml`). That call sets `fail-on-invalid-branch: true`,
+so a branch missing from `allowed-branch-pattern` makes the whole
+"Check PR and bump version" check go red — exactly what happened for
 `dependabot/github_actions/...` PRs, which could then never auto-merge.
 
-Two invariants are pinned here, both about the wiring in self-bump.yml:
+Two invariants are pinned here, both about the wiring in pr.yml:
 
 1. `allowed-branch-pattern` accepts a real Dependabot branch, so validation
    passes instead of failing the check.
@@ -29,41 +29,41 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-SELF_BUMP = ROOT / ".github/workflows/self-bump.yml"
+PR_WORKFLOW = ROOT / ".github/workflows/pr.yml"
 
 # A real Dependabot branch name, taken from the run that exposed the bug.
 DEPENDABOT_BRANCH = "dependabot/github_actions/github-actions-640176b5ab"
-BUMP_JOB = "bump"
+BUMP_JOB = "check-pr-and-bump"
 
 
 def bump_with() -> dict:
-    """Return the `with:` inputs of the self-bump `bump` job."""
-    data = yaml.safe_load(SELF_BUMP.read_text())
+    """Return the `with:` inputs of the PR caller's bump job."""
+    data = yaml.safe_load(PR_WORKFLOW.read_text())
     return data["jobs"][BUMP_JOB]["with"]
 
 
 def test_allowed_pattern_accepts_dependabot():
     allowed = bump_with()["allowed-branch-pattern"]
     assert re.search(allowed, DEPENDABOT_BRANCH), (
-        f"self-bump allowed-branch-pattern {allowed!r} rejects "
+        f"pr.yml allowed-branch-pattern {allowed!r} rejects "
         f"{DEPENDABOT_BRANCH!r}; Dependabot PRs would fail branch validation"
     )
-    print(f"self-bump OK: allowed-branch-pattern admits {DEPENDABOT_BRANCH!r}")
+    print(f"pr.yml OK: allowed-branch-pattern admits {DEPENDABOT_BRANCH!r}")
 
 
 def test_no_bump_pattern_does_not_skip_dependabot():
     no_bump = bump_with()["no-bump-branch-pattern"]
     assert not re.search(no_bump, DEPENDABOT_BRANCH), (
-        f"self-bump no-bump-branch-pattern {no_bump!r} matches "
+        f"pr.yml no-bump-branch-pattern {no_bump!r} matches "
         f"{DEPENDABOT_BRANCH!r}; a merged security bump would never publish"
     )
-    print(f"self-bump OK: no-bump-branch-pattern leaves {DEPENDABOT_BRANCH!r} to bump")
+    print(f"pr.yml OK: no-bump-branch-pattern leaves {DEPENDABOT_BRANCH!r} to bump")
 
 
 def main() -> int:
     test_allowed_pattern_accepts_dependabot()
     test_no_bump_pattern_does_not_skip_dependabot()
-    print("\nself-bump-branch-pattern OK")
+    print("\npr-bump-branch-pattern OK")
     return 0
 
 

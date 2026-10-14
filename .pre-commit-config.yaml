@@ -149,13 +149,6 @@ repos:
         pass_filenames: false
         files: '(\.github/actions/install-actionlint/action\.yml|tests/install-actionlint\.py)$'
 
-      - id: run-tox
-        name: verify run-tox uses mise and runs tox
-        entry: pytest tests/run-tox.py
-        language: system
-        pass_filenames: false
-        files: '(tox\.ini|\.github/actions/run-tox/action\.yml|tests/run-tox\.py)$'
-
       - id: run-pre-commit
         name: verify run-pre-commit uses mise and runs all hooks
         entry: pytest tests/run-pre-commit.py
@@ -164,11 +157,11 @@ repos:
         files: '(mise\.toml|\.github/actions/run-pre-commit/action\.yml|tests/run-pre-commit\.py)$'
 
       - id: self-bump-branch-pattern
-        name: verify self-bump admits Dependabot branches and still bumps them
+        name: verify internal PR caller admits Dependabot branches and still bumps them
         entry: pytest tests/self-bump-branch-pattern.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/self-bump\.yml|\.github/workflows/pr-check-and-bump\.yml|tests/self-bump-branch-pattern\.py)$'
+        files: '(\.github/workflows/pr\.yml|\.github/workflows/pr-check-and-bump\.yml|tests/self-bump-branch-pattern\.py)$'
 
       - id: select-pre-release-artifacts
         name: verify pre-release artifact selector only accepts binary artifacts

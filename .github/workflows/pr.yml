@@ -1,0 +1,65 @@
+name: PR
+
+# Internal PR entrypoint for workflows-lib. It exercises the repo's own reusable
+# contracts (bump + check-and-test) and runs the doc-refs invariant that needs
+# full tag history. All internal callers use `$/` so the PR validates the
+# contracts sitting at the PR head, not a lagging floating tag.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-pr-and-bump:
+    name: Check PR and bump version
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: $/.github/workflows/pr-check-and-bump.yml
+    with:
+      allowed-branch-pattern: "^(major|feat|fix|chore|docs|ci|test|refactor|perf|style|dependabot)/.+"
+      allowed-target-branches: "main,release/*"
+      version-file: "VERSION"
+      base-version-source: "file"
+      fail-on-invalid-branch: true
+      require-conventional-commits: true
+      no-bump-branch-pattern: "^(chore|docs|ci|test|refactor|perf|style)/.+"
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-check-and-test:
+    name: PR Check and Test
+    permissions:
+      contents: write
+      checks: write
+      pull-requests: write
+      security-events: write
+      actions: read
+    uses: $/.github/workflows/pr-check-and-test.yml
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  doc-refs:
+    name: Documented references resolve to published tags
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify documented consumer references
+        run: python3 tests/doc-refs.py

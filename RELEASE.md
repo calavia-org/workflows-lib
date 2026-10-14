@@ -5,7 +5,7 @@ only by `bump-version`, and the release workflow only reads it.
 
 ## How It Works
 
-1. A PR is opened. `.github/workflows/self-bump.yml` calls the
+1. A PR is opened. `.github/workflows/pr.yml` calls the
    `pr-check-and-bump.yml` contract, which reads `VERSION`, applies the bump, and
    pushes a `chore: bump version` commit to the branch.
 2. When the PR merges to `main`, `.github/workflows/release.yml` triggers.
