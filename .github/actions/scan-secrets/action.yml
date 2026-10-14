@@ -55,12 +55,13 @@ runs:
         SARIF="trufflehog-results.sarif"
         echo "Scanning ${{ inputs.path }} for secrets..."
         # --fail exits non-zero when verified secrets are found, which blocks the PR.
+        # TruffleHog v3 writes SARIF to stdout when passed --sarif; redirect it to
+        # the report file and continue so we can count findings and upload.
         trufflehog git "file://${{ inputs.path }}" \
-          --only-verified \
-          --output-format=sarif \
-          --output="$SARIF" \
+          --results=verified \
+          --sarif \
           --fail \
-          ${{ inputs.extra-args }} || true
+          ${{ inputs.extra-args }} > "$SARIF" || true
         # TruffleHog writes the SARIF file even when findings exist.
         if [ ! -f "$SARIF" ]; then
           echo "::error::TruffleHog did not produce a SARIF file"

@@ -42,9 +42,10 @@ runs:
           echo "Semgrep already installed: $(semgrep --version)"
           exit 0
         fi
-        echo "Installing Semgrep..."
-        python3 -m pip install --quiet --user semgrep
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        echo "Installing Semgrep into a local venv..."
+        python3 -m venv .venv-semgrep
+        .venv-semgrep/bin/pip install --quiet semgrep
+        echo "$PWD/.venv-semgrep/bin" >> "$GITHUB_PATH"
         echo "Installed: $(semgrep --version)"
 
     - name: Run Semgrep

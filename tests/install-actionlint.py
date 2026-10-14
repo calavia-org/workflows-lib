@@ -8,6 +8,7 @@ the current platform.
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,24 @@ def extract_step_script() -> str:
     raise KeyError("step install not found")
 
 
+def runner_os() -> str:
+    system = platform.system()
+    if system == "Darwin":
+        return "macOS"
+    if system == "Windows":
+        return "Windows"
+    return "Linux"
+
+
+def runner_arch() -> str:
+    machine = platform.machine()
+    if machine in ("x86_64", "AMD64"):
+        return "X64"
+    if machine in ("arm64", "aarch64", "ARM64"):
+        return "ARM64"
+    return machine.upper()
+
+
 def run_action(*, version: str) -> tuple[int, str, str]:
     script = extract_step_script()
 
@@ -41,8 +60,8 @@ def run_action(*, version: str) -> tuple[int, str, str]:
 
         env = os.environ.copy()
         env["VERSION"] = version
-        env["RUNNER_OS"] = "macOS"
-        env["RUNNER_ARCH"] = "ARM64"
+        env["RUNNER_OS"] = runner_os()
+        env["RUNNER_ARCH"] = runner_arch()
         env["RUNNER_TOOL_CACHE"] = str(tmp)
         env["GITHUB_OUTPUT"] = str(output_path)
 
