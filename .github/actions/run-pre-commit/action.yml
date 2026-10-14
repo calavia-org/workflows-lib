@@ -85,4 +85,7 @@ runs:
           ALL_FILES=""
         fi
 
-        .venv/bin/pre-commit run $ALL_FILES --show-diff-on-failure ${{ inputs.args }}
+        # Make the venv tools (pre-commit, pytest, repo package) available to
+        # system-language pre-commit hooks that spawn subprocesses.
+        export PATH="$PWD/.venv/bin:$PATH"
+        pre-commit run $ALL_FILES --show-diff-on-failure ${{ inputs.args }}

@@ -181,9 +181,11 @@ runs:
       shell: bash
       run: |
         if [ -f "${{ inputs.tox-ini }}" ]; then
-          python -m pip install --quiet tox
+          # Ubuntu 24.04+ Python is externally managed; --break-system-packages
+          # is acceptable on ephemeral CI runners where we just need the tool.
+          python -m pip install --quiet --break-system-packages tox
           if [ "${{ inputs.technology }}" == "ansible" ]; then
-            python -m pip install --quiet tox-ansible
+            python -m pip install --quiet --break-system-packages tox-ansible
           fi
         fi
 
