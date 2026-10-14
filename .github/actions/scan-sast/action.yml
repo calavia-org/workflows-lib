@@ -1,0 +1,106 @@
+name: 'Scan SAST'
+description: 'Installs Semgrep and runs static application security testing, producing SARIF and blocking on findings.'
+
+inputs:
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+  severity:
+    description: 'Minimum severity to fail on (HIGH, MEDIUM, LOW)'
+    required: false
+    default: 'HIGH'
+  upload-sarif:
+    description: 'Upload the SARIF report to the GitHub Security tab'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for SARIF upload'
+    required: false
+    default: '${{ github.token }}'
+  extra-args:
+    description: 'Extra arguments passed to the Semgrep CLI'
+    required: false
+    default: ''
+
+outputs:
+  sarif-path:
+    description: 'Path to the generated SARIF file'
+    value: ${{ steps.scan.outputs.sarif-path }}
+  findings:
+    description: 'Number of findings reported'
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Semgrep
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v semgrep >/dev/null 2>&1; then
+          echo "Semgrep already installed: $(semgrep --version)"
+          exit 0
+        fi
+        echo "Installing Semgrep..."
+        python3 -m pip install --quiet --user semgrep
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        echo "Installed: $(semgrep --version)"
+
+    - name: Run Semgrep
+      id: scan
+      shell: bash
+      run: |
+        set -euo pipefail
+        SARIF="semgrep-results.sarif"
+        SEVERITY="${{ inputs.severity }}"
+        SEVERITY_FLAGS=""
+        case "${SEVERITY^^}" in
+          HIGH|CRITICAL)
+            SEVERITY_FLAGS="--severity ERROR"
+            ;;
+          MEDIUM)
+            SEVERITY_FLAGS="--severity ERROR --severity WARNING"
+            ;;
+          LOW)
+            # No severity filter: run all rules.
+            ;;
+          *)
+            echo "::warning::Unknown severity '$SEVERITY'; defaulting to HIGH"
+            SEVERITY_FLAGS="--severity ERROR"
+            ;;
+        esac
+        echo "Scanning ${{ inputs.path }} with Semgrep (severity >= $SEVERITY)..."
+        # --error makes Semgrep exit non-zero on findings, blocking the PR.
+        semgrep \
+          --config=p/security-audit \
+          --config=p/owasp-top-ten \
+          --config=p/secrets \
+          --config=p/ci \
+          $SEVERITY_FLAGS \
+          --sarif \
+          --output="$SARIF" \
+          --error \
+          ${{ inputs.extra-args }} \
+          "${{ inputs.path }}" || true
+        if [ ! -f "$SARIF" ]; then
+          echo "::error::Semgrep did not produce a SARIF file"
+          exit 1
+        fi
+        COUNT=$(python3 -c "import json; print(len(json.load(open('$SARIF')).get('results', [])))" 2>/dev/null || echo "0")
+        echo "Findings: $COUNT"
+        echo "sarif-path=$SARIF" >> "$GITHUB_OUTPUT"
+        echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+        if [ "$COUNT" -ne 0 ]; then
+          echo "::error::$COUNT Semgrep finding(s) detected. See the SARIF report in the GitHub Security tab."
+          exit 1
+        fi
+        echo "✅ No Semgrep findings at or above $SEVERITY severity."
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+        category: semgrep-sast
+        token: ${{ inputs.github-token }}

@@ -190,3 +190,10 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/workflows/.*\.ya?ml|tests/local-action-refs\.py)$'
+
+      - id: scan-security
+        name: verify SAST/SCA scanner actions keep their required contract
+        entry: pytest tests/scan-security.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/scan-.*/action\.yml|tests/scan-security\.py)$'

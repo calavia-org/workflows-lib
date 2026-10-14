@@ -7,7 +7,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 | Workflow | Purpose | Status |
 |----------|---------|--------|
 | [`pr-check-and-bump.yml`](.github/workflows/pr-check-and-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
-| [`pr-check-and-test.yml`](.github/workflows/pr-check-and-test.yml) | Unified PR check and test workflow with technology auto-detection | Active |
+| [`pr-check-and-test.yml`](.github/workflows/pr-check-and-test.yml) | Unified PR check, test, and security scanning workflow with technology auto-detection | Active |
 | [`release-artifacts.yml`](.github/workflows/release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 
 ## Technology Support
@@ -15,8 +15,9 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 ### `pr-check-and-test.yml`
 - **Auto-detect**: Python, Node.js, Go, Rust, Java, Docker, Ansible, Generic
 - **Phases**: Pre-commit, lint, build, test (unit, integration, e2e), package, publish
-- **Reports**: Test results, coverage, PR comments
-- **Docs**: See [`docs/pr-check-and-test.md`](docs/pr-check-and-test.md)
+- **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)
+- **Reports**: Test results, coverage, SARIF uploads, PR comments
+- **Docs**: See [`docs/security-scan.md`](docs/security-scan.md)
 
 ### `release-artifacts.yml`
 - **Auto-detect**: Version from `galaxy.yml`, `pom.xml`, `Chart.yml`, `package.json`, etc.
@@ -30,7 +31,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 This repository is designed to grow. Future additions may include:
 - Terraform infrastructure automation
-- Security scanning workflows
+- Release-time SBOM, provenance, and artifact vulnerability scanning
 - Documentation generation workflows
 
 ## Dependencies

@@ -147,7 +147,8 @@ def main():
         "unit": ["detect", "build"],
         "package": ["detect", "build"],
         "integration": ["detect", "package"],
-        "report": ["unit", "integration", "build", "package", "pre-commit"],
+        "security": ["detect"],
+        "report": ["unit", "integration", "build", "package", "pre-commit", "security"],
         "pre-release": ["report"],
     }
     for job, deps in expected.items():
@@ -167,6 +168,7 @@ def main():
         "BUILD_RESULT",
         "PACKAGE_RESULT",
         "PRE_COMMIT_RESULT",
+        "SECURITY_RESULT",
     ):
         if token not in script:
             print(f"FAIL: gate script never reads {token}")
@@ -202,7 +204,7 @@ def main():
             print("        " + out.replace("\n", "\n        "))
 
     print("a red prerequisite must turn the gate red:")
-    for job in ("unit", "integration", "build", "package", "pre-commit"):
+    for job in ("unit", "integration", "build", "package", "pre-commit", "security"):
         scenario(f"{job} fails", {job}, expect_pass=False, **{"run-package": True})
 
     # The `expected` drift check above already guards the `needs` edge. This
@@ -273,6 +275,7 @@ def main():
         ("integration disabled", "integration", {"run_integration_tests": False}),
         ("build disabled", "build", {"run_build": False}),
         ("package disabled", "package", {"run_package": False}),
+        ("security disabled", "security", {"run_security_scans": False}),
     ):
         r = run(jobs, dict(defaults, **over), set(), script=script, env_exprs=env_exprs)
         passed, out = run_gate(script, r, env_exprs)

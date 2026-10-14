@@ -218,6 +218,41 @@ name: PR Check and Test
         type: string
         required: false
         default: 'CI Results'
+      run-security-scans:
+        description: 'Run the security scanning job'
+        type: boolean
+        required: false
+        default: true
+      scan-secrets:
+        description: 'Run secret scanning with TruffleHog'
+        type: boolean
+        required: false
+        default: true
+      scan-sast:
+        description: 'Run static analysis with Semgrep'
+        type: boolean
+        required: false
+        default: true
+      scan-misconfig:
+        description: 'Run misconfiguration scanning with Trivy'
+        type: boolean
+        required: false
+        default: true
+      scan-dependencies:
+        description: 'Run dependency vulnerability scanning with OSV-Scanner'
+        type: boolean
+        required: false
+        default: true
+      security-severity:
+        description: 'Minimum severity that causes the security job to fail (HIGH, MEDIUM, LOW)'
+        type: string
+        required: false
+        default: 'HIGH'
+      security-sarif-upload:
+        description: 'Upload SARIF reports to the GitHub Security tab'
+        type: boolean
+        required: false
+        default: true
 
     secrets:
       github-token:
@@ -284,6 +319,57 @@ jobs:
       - uses: $/.github/actions/run-tox
         with:
           args: '-c ${{ inputs.tox-ini }}'
+
+  # Security scans are a standalone quality gate. They run in parallel with the
+  # build/test phases and feed into the final report gate. The job needs
+  # security-events: write so the scanner actions can upload SARIF results.
+  security:
+    name: Security Scan
+    needs: detect
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ always() && inputs.run-security-scans && (needs.detect.result == 'success' || needs.detect.result == 'skipped') }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan secrets
+        if: ${{ inputs.scan-secrets }}
+        uses: $/.github/actions/scan-secrets
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan SAST
+        if: ${{ inputs.scan-sast }}
+        uses: $/.github/actions/scan-sast
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan misconfigurations
+        if: ${{ inputs.scan-misconfig }}
+        uses: $/.github/actions/scan-misconfig
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan dependencies
+        if: ${{ inputs.scan-dependencies }}
+        uses: $/.github/actions/scan-dependencies
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
 
   # Unit tests are the mandatory gate for the code under test. Always runs, so a
   # skipped unit job still reports instead of vanishing.
@@ -669,7 +755,7 @@ jobs:
     # `pre-commit` is listed even though no other job depends on it, so that its
     # result is asserted directly rather than being enforced by accident through
     # `unit` skipping.
-    needs: [unit, integration, build, package, pre-commit]
+    needs: [unit, integration, build, package, pre-commit, security]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -709,6 +795,7 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
           PRE_COMMIT_RESULT: ${{ needs.pre-commit.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
         run: |
           echo "Unit: $UNIT_RESULT"
           echo "Integration: $INTEGRATION_RESULT"
@@ -746,6 +833,13 @@ jobs:
           # hook would leave the required `Test` check green.
           if [ "$PRE_COMMIT_RESULT" != "success" ] && [ "$PRE_COMMIT_RESULT" != "skipped" ]; then
             echo "❌ Pre-commit did not pass (result: $PRE_COMMIT_RESULT)."
+            FAILED=1
+          fi
+          # `security` is another quality gate with no downstream dependents; a
+          # failed scan must be asserted directly, otherwise a skip would let the
+          # required `Test` check go green while SAST/secret findings exist.
+          if [ "$SECURITY_RESULT" != "success" ] && [ "$SECURITY_RESULT" != "skipped" ]; then
+            echo "❌ Security scans did not pass (result: $SECURITY_RESULT)."
             FAILED=1
           fi
           if [ "$FAILED" -ne 0 ]; then
