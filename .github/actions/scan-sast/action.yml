@@ -51,39 +51,43 @@ runs:
     - name: Run Semgrep
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SEVERITY: ${{ inputs.severity }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
         set -euo pipefail
         SARIF="semgrep-results.sarif"
-        SEVERITY="${{ inputs.severity }}"
-        SEVERITY_FLAGS=""
+        SEVERITY_FLAGS=()
         case "${SEVERITY^^}" in
           HIGH|CRITICAL)
-            SEVERITY_FLAGS="--severity ERROR"
+            SEVERITY_FLAGS=(--severity ERROR)
             ;;
           MEDIUM)
-            SEVERITY_FLAGS="--severity ERROR --severity WARNING"
+            SEVERITY_FLAGS=(--severity ERROR --severity WARNING)
             ;;
           LOW)
             # No severity filter: run all rules.
             ;;
           *)
             echo "::warning::Unknown severity '$SEVERITY'; defaulting to HIGH"
-            SEVERITY_FLAGS="--severity ERROR"
+            SEVERITY_FLAGS=(--severity ERROR)
             ;;
         esac
-        echo "Scanning ${{ inputs.path }} with Semgrep (severity >= $SEVERITY)..."
+        echo "Scanning $SCAN_PATH with Semgrep (severity >= $SEVERITY)..."
         # --error makes Semgrep exit non-zero on findings, blocking the PR.
+        read -ra extra_args <<< "$EXTRA_ARGS"
         semgrep \
           --config=p/security-audit \
           --config=p/owasp-top-ten \
           --config=p/secrets \
           --config=p/ci \
-          $SEVERITY_FLAGS \
+          "${SEVERITY_FLAGS[@]}" \
           --sarif \
           --output="$SARIF" \
           --error \
-          ${{ inputs.extra-args }} \
-          "${{ inputs.path }}" || true
+          "${extra_args[@]}" \
+          "$SCAN_PATH" || true
         if [ ! -f "$SARIF" ]; then
           echo "::error::Semgrep did not produce a SARIF file"
           exit 1

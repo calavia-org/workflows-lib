@@ -43,25 +43,31 @@ runs:
           exit 0
         fi
         echo "Installing TruffleHog..."
-        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
-          | sh -s -- -b /usr/local/bin
+        INSTALLER="/tmp/trufflehog-install.sh"
+        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh -o "$INSTALLER"
+        chmod +x "$INSTALLER"
+        "$INSTALLER" -b /usr/local/bin
         echo "Installed: $(trufflehog --version)"
 
     - name: Scan for secrets
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
         set -euo pipefail
         SARIF="trufflehog-results.sarif"
-        echo "Scanning ${{ inputs.path }} for secrets..."
+        echo "Scanning $SCAN_PATH for secrets..."
         # --fail exits non-zero when verified secrets are found, which blocks the PR.
         # TruffleHog v3 writes SARIF to stdout when passed --sarif; redirect it to
         # the report file and continue so we can count findings and upload.
-        trufflehog git "file://${{ inputs.path }}" \
+        read -ra extra_args <<< "$EXTRA_ARGS"
+        trufflehog git "file://${SCAN_PATH}" \
           --results=verified \
           --sarif \
           --fail \
-          ${{ inputs.extra-args }} > "$SARIF" || true
+          "${extra_args[@]}" > "$SARIF" || true
         # TruffleHog writes the SARIF file even when findings exist.
         if [ ! -f "$SARIF" ]; then
           echo "::error::TruffleHog did not produce a SARIF file"

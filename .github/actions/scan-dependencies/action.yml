@@ -57,18 +57,22 @@ runs:
     - name: Scan dependencies
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
         set -euo pipefail
         SARIF="osv-scanner-results.sarif"
-        echo "Scanning ${{ inputs.path }} for vulnerable dependencies..."
+        echo "Scanning $SCAN_PATH for vulnerable dependencies..."
         # OSV-Scanner exits non-zero when vulnerabilities are found, so we continue
         # to capture the SARIF file and then decide whether to fail the step.
+        read -ra extra_args <<< "$EXTRA_ARGS"
         osv-scanner \
           --format sarif \
           --output-file "$SARIF" \
           --recursive \
-          ${{ inputs.extra-args }} \
-          "${{ inputs.path }}" || true
+          "${extra_args[@]}" \
+          "$SCAN_PATH" || true
         if [ ! -f "$SARIF" ]; then
           # If the repo has no supported lockfile/manifest, the scanner exits
           # before writing SARIF. Treat that as zero findings rather than a

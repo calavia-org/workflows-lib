@@ -43,27 +43,34 @@ runs:
           exit 0
         fi
         echo "Installing Trivy..."
-        curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-          | sh -s -- -b /usr/local/bin
+        INSTALLER="/tmp/trivy-install.sh"
+        curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$INSTALLER"
+        chmod +x "$INSTALLER"
+        "$INSTALLER" -b /usr/local/bin
         echo "Installed: $(trivy --version)"
 
     - name: Scan for misconfigurations
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SEVERITY: ${{ inputs.severity }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
         set -euo pipefail
         SARIF="trivy-misconfig-results.sarif"
-        SEVERITY="${{ inputs.severity }}"
-        echo "Scanning ${{ inputs.path }} for misconfigurations (severity >= ${SEVERITY:-HIGH})..."
+        SEV="${SEVERITY:-HIGH}"
+        echo "Scanning $SCAN_PATH for misconfigurations (severity >= $SEV)..."
         # --exit-code 1 makes Trivy fail on findings, blocking the PR.
+        read -ra extra_args <<< "$EXTRA_ARGS"
         trivy fs \
           --scanners=misconfig \
-          --severity="${SEVERITY:-HIGH}" \
+          --severity="$SEV" \
           --format=sarif \
           --output="$SARIF" \
           --exit-code=1 \
-          ${{ inputs.extra-args }} \
-          "${{ inputs.path }}" || true
+          "${extra_args[@]}" \
+          "$SCAN_PATH" || true
         if [ ! -f "$SARIF" ]; then
           echo "::error::Trivy did not produce a SARIF file"
           exit 1
@@ -76,7 +83,7 @@ runs:
           echo "::error::$COUNT misconfiguration(s) detected. See the SARIF report in the GitHub Security tab."
           exit 1
         fi
-        echo "✅ No Trivy misconfiguration findings at or above ${SEVERITY:-HIGH} severity."
+        echo "✅ No Trivy misconfiguration findings at or above $SEV severity."
 
     - name: Upload SARIF
       if: ${{ inputs.upload-sarif == 'true' }}
