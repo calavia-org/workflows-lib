@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify the internal PR caller admits Dependabot branches and still bumps them.
 
-workflows-lib versions itself through `pr-check-and-bump.yml` (see
+workflows-lib versions itself through `version-bump.yml` (see
 `.github/workflows/pr.yml`). That call sets `fail-on-invalid-branch: true`,
 so a branch missing from `allowed-branch-pattern` makes the whole
 "Check PR and bump version" check go red — exactly what happened for

@@ -63,14 +63,14 @@ repos:
         entry: pytest tests/bump-version-derivation.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-version-derivation\.py)$'
+        files: '(\.github/workflows/version-bump\.yml|tests/bump-version-derivation\.py)$'
 
       - id: bump-type-selection
         name: verify a mixed feat and fix PR cannot be downgraded to a patch bump
         entry: pytest tests/bump-type-selection.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-type-selection\.py)$'
+        files: '(\.github/workflows/version-bump\.yml|tests/bump-type-selection\.py)$'
 
       - id: validate-actions
         name: verify composite action metadata resolves to real steps
@@ -98,14 +98,14 @@ repos:
         entry: pytest tests/version-authority.py
         language: system
         pass_filenames: false
-        files: '(^\.github/workflows/release(-github)?\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/pr-check-and-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
+        files: '(^\.github/workflows/release\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/version-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
 
       - id: bump-guard-state
         name: verify the bump guard detects an applied bump from PR state, not the last commit message
         entry: pytest tests/bump-guard-state.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/pr-check-and-bump\.yml|tests/bump-guard-state\.py)$'
+        files: '(\.github/workflows/version-bump\.yml|tests/bump-guard-state\.py)$'
 
       - id: validate-branch
         name: verify branch validation accepts allowed patterns and rejects invalid ones
@@ -161,7 +161,7 @@ repos:
         entry: pytest tests/self-bump-branch-pattern.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/pr\.yml|\.github/workflows/pr-check-and-bump\.yml|tests/self-bump-branch-pattern\.py)$'
+        files: '(\.github/workflows/pr\.yml|\.github/workflows/version-bump\.yml|tests/self-bump-branch-pattern\.py)$'
 
       - id: select-pre-release-artifacts
         name: verify pre-release artifact selector only accepts binary artifacts

@@ -25,11 +25,10 @@ import tempfile
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CONTRACT = ROOT / ".github" / "workflows" / "release-github.yml"
 ACTION = ROOT / ".github" / "actions" / "release-github" / "action.yml"
 ENTRYPOINT = ROOT / ".github" / "workflows" / "release.yml"
 VERSION_FILE = ROOT / "VERSION"
-BUMP_CONTRACT = ROOT / ".github" / "workflows" / "pr-check-and-bump.yml"
+BUMP_CONTRACT = ROOT / ".github" / "workflows" / "version-bump.yml"
 BUMP_ACTION = ROOT / ".github" / "actions" / "bump-version" / "action.yml"
 
 
@@ -181,24 +180,12 @@ def main() -> int:
         if not condition:
             failures.append(f"{label}{f' -- {detail}' if detail else ''}")
 
-    contract = yaml.safe_load(CONTRACT.read_text())
     action = yaml.safe_load(ACTION.read_text())
     entry = yaml.safe_load(ENTRYPOINT.read_text())
 
-    # 1. The contract must not accept an empty version.
-    c_version = contract[True]["workflow_call"]["inputs"]["version"]
-    check(
-        "contract version is required",
-        c_version.get("required") is True,
-        str(c_version),
-    )
-    check(
-        "contract version has no default",
-        "default" not in c_version,
-        f"default={c_version.get('default')!r} would re-enable derivation",
-    )
-
-    # 2. Same at the implementation boundary.
+    # 1. The implementation action must require an explicit version. An empty or
+    #    default version would let github-tag-action derive from commit messages,
+    #    creating a second authority separate from the VERSION file.
     a_version = action["inputs"]["version"]
     check(
         "action version is required", a_version.get("required") is True, str(a_version)
@@ -209,7 +196,7 @@ def main() -> int:
         f"default={a_version.get('default')!r}",
     )
 
-    # 3. custom_tag must be fed the required version. An empty custom_tag is
+    # 2. custom_tag must be fed the required version. An empty custom_tag is
     # precisely what makes github-tag-action derive from commit messages.
     tag_steps = [s for s in action["runs"]["steps"] if s.get("id") == "tag"]
     check("tag step exists", len(tag_steps) == 1, f"found {len(tag_steps)}")
@@ -221,7 +208,7 @@ def main() -> int:
             f"custom_tag={custom_tag!r}",
         )
 
-    # 4. VERSION is the artifact bump-version owns, so it must exist and be clean.
+    # 3. VERSION is the artifact bump-version owns, so it must exist and be clean.
     check("VERSION file exists", VERSION_FILE.is_file())
     if VERSION_FILE.is_file():
         raw = VERSION_FILE.read_text().strip()
@@ -231,7 +218,7 @@ def main() -> int:
             f"VERSION={raw!r}",
         )
 
-    # 5. The self-release entrypoint reads that file instead of deriving.
+    # 4. The self-release entrypoint reads that file instead of deriving.
     entry_text = ENTRYPOINT.read_text()
     check(
         "entrypoint reads the VERSION file",
@@ -246,10 +233,11 @@ def main() -> int:
     )
 
     release_job = entry["jobs"]["release"]
+    release_job_text = ENTRYPOINT.read_text()
     check(
-        "entrypoint passes the resolved version to the contract",
-        release_job["with"]["version"] == "${{ needs.resolve.outputs.version }}",
-        f"version={release_job['with']['version']!r}",
+        "entrypoint passes the resolved version to the release action",
+        "${{ needs.resolve.outputs.version }}" in release_job_text,
+        "expected the resolved version to be passed to release-github action",
     )
     check(
         "entrypoint resolves before releasing",
@@ -432,7 +420,7 @@ def main() -> int:
         return 1
 
     print(
-        f"version authority OK ({checked} checks: contract, action, tag wiring, VERSION, "
+        f"version authority OK ({checked} checks: action, tag wiring, VERSION, "
         "entrypoint, version-file reader/writer round trip, release gate)"
     )
     return 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify how pr-check-and-bump.yml selects the bump type from a PR's commits.
+"""Verify how version-bump.yml selects the bump type from a PR's commits.
 
 The derivation suite proves which *base version* a bump starts from. This suite
 covers the other half: which *type* that bump takes. The two are independent

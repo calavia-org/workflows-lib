@@ -6,7 +6,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 | Workflow | Purpose | Status |
 |----------|---------|--------|
-| [`pr-check-and-bump.yml`](.github/workflows/pr-check-and-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
+| [`version-bump.yml`](.github/workflows/version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
 | [`pr-check-and-test.yml`](.github/workflows/pr-check-and-test.yml) | Unified PR check, test, and security scanning workflow with technology auto-detection | Active |
 | [`release-artifacts.yml`](.github/workflows/release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 
@@ -38,16 +38,17 @@ This repository is designed to grow. Future additions may include:
 
 | Dependency | Repository | Purpose |
 |------------|------------|---------|
-| Version bumping | [`bump-version`](.github/actions/bump-version) | Composite action used inside `pr-check-and-bump.yml` |
+| Version bumping | [`bump-version`](.github/actions/bump-version) | Composite action used inside `version-bump.yml` |
 
 ## Usage
 
 Reference workflows using the `uses` keyword in your repository:
 
+<!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the reference becomes valid once the floating v0 tag is moved to the commit that contains it. -->
 ```yaml
 jobs:
-  pr-check:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
+  version-bump:
+    uses: calavia-org/workflows-lib/.github/workflows/version-bump.yml@v0
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -101,7 +102,7 @@ mise exec -- tox
 
 When adding new workflows:
 1. Use `workflow_call` trigger for reusability
-2. Create a dedicated documentation file (see `docs/pr-check-and-bump.md` as example)
+2. Create a dedicated documentation file (see `docs/version-bump.md` as example)
 3. Add or extend a pytest-collectable invariant suite in `tests/`
 4. Update this README to list the new workflow
 5. Test in a consumer repository before releasing

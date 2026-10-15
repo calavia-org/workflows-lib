@@ -19,7 +19,7 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 | `detect-technology.py` | Technology-detection vocabulary (`ansible > python > nodejs` precedence) |
 | `validate-actions.py` | Every composite action's metadata resolves to real steps/outputs |
 | `validate-branch.py` | Branch/target validation accepts allowed patterns and rejects invalid ones |
-| `self-bump-branch-pattern.py` | internal PR caller admits `dependabot/` branches and does not skip their bump |
+| `self-bump-branch-pattern.py` | internal PR caller admits `dependabot/` branches and does not skip their version bump |
 | `doc-refs.py` | Every documented `...@<ref>` resolves to a published tag (needs tag history) |
 
 ## CONVENTIONS
