@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the required `Test` gate in ci.yml.
+"""Verify the required `Gate` check in ci.yml.
 
 The gate logic is EXTRACTED FROM THE WORKFLOW and executed with bash, so this
 tests the shipped shell rather than a transcription of it. Job `if` expressions
@@ -196,7 +196,7 @@ def main():
         good = passed == expect_pass
         ok_all &= good
         print(
-            f"  {'ok ' if good else 'FAIL'} {label:<36} Test "
+            f"  {'ok ' if good else 'FAIL'} {label:<36} Gate "
             f"{'passes' if passed else 'fails'} (expected "
             f"{'pass' if expect_pass else 'fail'})"
         )
@@ -283,7 +283,7 @@ def main():
         ok_all &= good
         print(
             f"  {'ok ' if good else 'FAIL'} {label:<36} {job}={r[job]} "
-            f"Test={'passes' if passed else 'fails'} (expected skipped/passes)"
+            f"Gate={'passes' if passed else 'fails'} (expected skipped/passes)"
         )
         if not good:
             print("        " + out.replace("\n", "\n        "))

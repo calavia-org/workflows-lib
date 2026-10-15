@@ -2,7 +2,7 @@
 
 The `ci.yml` workflow includes a built-in `security` job that runs
 open-source SAST, secret, misconfiguration, and dependency-vulnerability
-scanners on every pull request. Findings fail the required `Test` gate, so they
+scanners on every pull request. Findings fail the required `Gate` check, so they
 block the merge.
 
 ## Scanners

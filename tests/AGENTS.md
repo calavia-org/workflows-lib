@@ -14,7 +14,7 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 | `bump-version-derivation.py` | Base-version derivation (tag vs file source) never rolls a release back |
 | `bump-type-selection.py` | Mixed `feat`+`fix` PR resolves to minor — never downgraded to patch |
 | `bump-guard-state.py` | Already-bumped detection reads PR state, not the last commit message |
-| `gate-truth-table.py` | ci `Test` gate goes red on any red prerequisite |
+| `gate-truth-table.py` | ci `Gate` check goes red on any red prerequisite |
 | `release-github-floating-tag.py` | Floating `v<major>` tag derives from the created tag; empty tag aborts |
 | `detect-technology.py` | Technology-detection vocabulary (`ansible > python > nodejs` precedence) |
 | `validate-actions.py` | Every composite action's metadata resolves to real steps/outputs |
