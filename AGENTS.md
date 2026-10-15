@@ -40,7 +40,7 @@ No LSP covers YAML workflows (Python LSP not installed); map derived from struct
 | Contract | Jobs | Key inputs | Outputs |
 |----------|------|------------|---------|
 | `version-bump.yml` | check-pr, auto-bump-version | version-file, base-version-source, branch patterns | bump_type, should_bump, has_conventional, branch_valid, target_valid |
-| `pr-check-and-test.yml` | detect, pre-commit, build, unit, package, integration, pre-release, report | 40+ (tech, phases, caching, notifications) | none (PR comments/checks) |
+| `ci.yml` | detect, pre-commit, build, unit, package, integration, pre-release, report | 40+ (tech, phases, caching, notifications) | none (PR comments/checks) |
 | `release-artifacts.yml` | 13 (detect→test→build→sign→publish→rollback) | 30+ (artifacts, targets, signing) | none |
 | `auto-merge-dependabot.yml` | auto-merge | merge-method | none |
 

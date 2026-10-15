@@ -7,12 +7,12 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 | Workflow | Purpose | Status |
 |----------|---------|--------|
 | [`reusable-version-bump.yml`](.github/workflows/reusable-version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
-| [`reusable-pr-check-and-test.yml`](.github/workflows/reusable-pr-check-and-test.yml) | Unified PR check, test, and security scanning workflow with technology auto-detection | Active |
+| [`reusable-ci.yml`](.github/workflows/reusable-ci.yml) | Unified CI pipeline (pre-commit, build, tests, security scanning, optional pre-release) with technology auto-detection | Active |
 | [`reusable-release-artifacts.yml`](.github/workflows/reusable-release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 
 ## Technology Support
 
-### `pr-check-and-test.yml`
+### `ci.yml`
 - **Auto-detect**: Python, Node.js, Go, Rust, Java, Docker, Ansible, Generic
 - **Phases**: Pre-commit, lint, build, test (unit, integration, e2e), package, publish
 - **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)

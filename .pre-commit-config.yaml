@@ -56,7 +56,7 @@ repos:
         entry: pytest tests/gate-truth-table.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/reusable-pr-check-and-test\.yml|tests/gate-truth-table\.py)$'
+        files: '(\.github/workflows/reusable-ci\.yml|tests/gate-truth-table\.py)$'
 
       - id: bump-version-derivation
         name: verify the version bump cannot roll a release back
@@ -168,14 +168,14 @@ repos:
         entry: pytest tests/select-pre-release-artifacts.py
         language: system
         pass_filenames: false
-        files: '(\.github/actions/select-pre-release-artifacts/action\.yml|\.github/workflows/reusable-pr-check-and-test\.yml|tests/select-pre-release-artifacts\.py)$'
+        files: '(\.github/actions/select-pre-release-artifacts/action\.yml|\.github/workflows/reusable-ci\.yml|tests/select-pre-release-artifacts\.py)$'
 
       - id: verify-required-tests-passed
         name: verify the required-test gate cannot go green on a failing job
         entry: pytest tests/verify-required-tests-passed.py
         language: system
         pass_filenames: false
-        files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/reusable-pr-check-and-test\.yml|tests/verify-required-tests-passed\.py)$'
+        files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/reusable-ci\.yml|tests/verify-required-tests-passed\.py)$'
 
       - id: local-action-refs
         name: verify reusable workflows reference their own actions via $/ not ./

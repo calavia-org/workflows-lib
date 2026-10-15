@@ -13,10 +13,10 @@ Public workflows use the `reusable-` prefix; repo-specific entrypoints use the `
 | Workflow | Role |
 |----------|------|
 | `reusable-version-bump.yml` | PUBLIC: conventional-commit validation + version-file bump (outputs `bump_type`, `should_bump`, ...) |
-| `reusable-pr-check-and-test.yml` | PUBLIC: unified PR pipeline, tech auto-detect, `Test` gate, optional pre-release, built-in SAST/secret/misconfig/dependency scanning |
+| `reusable-ci.yml` | PUBLIC: unified CI pipeline, tech auto-detect, `Test` gate, optional pre-release, built-in SAST/secret/misconfig/dependency scanning |
 | `reusable-release-artifacts.yml` | PUBLIC: multi-target release — binary/docker/EE/helm, signing, publish, rollback |
 | `reusable-auto-merge-dependabot.yml` | PUBLIC: auto-merge Dependabot PRs tied to OPEN security advisories |
-| `self-pr.yml` | INTERNAL: on PR, runs `reusable-version-bump.yml` + `reusable-pr-check-and-test.yml` against this repo and verifies documented refs resolve to published tags |
+| `self-pr.yml` | INTERNAL: on PR, runs `reusable-version-bump.yml` + `reusable-ci.yml` against this repo and verifies documented refs resolve to published tags |
 | `self-release.yml` | INTERNAL: on push to main, reads `VERSION`, creates the tag and GitHub Release |
 | `self-dependabot-auto-merge.yml` | INTERNAL: on Dependabot PRs, enables auto-merge for PRs linked to an open security advisory |
 

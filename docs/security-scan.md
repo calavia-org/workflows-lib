@@ -1,6 +1,6 @@
 # Security Scanning
 
-The `pr-check-and-test.yml` workflow includes a built-in `security` job that runs
+The `ci.yml` workflow includes a built-in `security` job that runs
 open-source SAST, secret, misconfiguration, and dependency-vulnerability
 scanners on every pull request. Findings fail the required `Test` gate, so they
 block the merge.
@@ -21,7 +21,7 @@ organization's Actions allowlist.
 
 ## Inputs
 
-All inputs live on `pr-check-and-test.yml`:
+All inputs live on `ci.yml`:
 
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -40,8 +40,8 @@ upload SARIF results:
 
 ```yaml
 jobs:
-  pr-check-and-test:
-    uses: calavia-org/workflows-lib/.github/workflows/reusable-pr-check-and-test.yml@v0
+  ci:
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-ci.yml@v0
     permissions:
       contents: write
       checks: write

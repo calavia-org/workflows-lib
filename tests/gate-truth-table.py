@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the required `Test` gate in pr-check-and-test.yml.
+"""Verify the required `Test` gate in ci.yml.
 
 The gate logic is EXTRACTED FROM THE WORKFLOW and executed with bash, so this
 tests the shipped shell rather than a transcription of it. Job `if` expressions
@@ -20,7 +20,7 @@ import sys
 
 import yaml
 
-WF = ".github/workflows/reusable-pr-check-and-test.yml"
+WF = ".github/workflows/reusable-ci.yml"
 STATUS_OK = {"success", "skipped"}
 GATE_STEP = "Verify required tests passed"
 

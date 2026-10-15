@@ -1,4 +1,4 @@
-name: PR Check and Test
+name: CI
 
 'on':
   workflow_call:
@@ -724,9 +724,9 @@ jobs:
           artifacts: ${{ steps.select.outputs.paths }}
           github-token: ${{ secrets.github-token }}
 
-  # Named `Test` and pinned to `always()` on purpose: `pr-check-and-test / Test` is a
-  # required status check on main in every consuming repo, so gating it on
-  # report-enabled would block every PR org-wide.
+  # Named `Test` and pinned to `always()` on purpose: the `Test` check produced by
+  # this reusable workflow is a required status check on main in every consuming
+  # repo, so gating it on report-enabled would block every PR org-wide.
   report:
     name: Test
     # Every job listed here is asserted by the gate step below, which is required

@@ -1,7 +1,7 @@
 name: PR
 
 # Internal PR entrypoint for workflows-lib. It exercises the repo's own reusable
-# contracts (bump + check-and-test) and runs the doc-refs invariant that needs
+# contracts (bump + ci) and runs the doc-refs invariant that needs
 # full tag history. All internal callers use `$/` so the PR validates the
 # contracts sitting at the PR head, not a lagging floating tag.
 on:
@@ -37,15 +37,15 @@ jobs:
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 
-  pr-check-and-test:
-    name: PR Check and Test
+  ci:
+    name: CI
     permissions:
       contents: write
       checks: write
       pull-requests: write
       security-events: write
       actions: read
-    uses: $/.github/workflows/reusable-pr-check-and-test.yml
+    uses: $/.github/workflows/reusable-ci.yml
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 
