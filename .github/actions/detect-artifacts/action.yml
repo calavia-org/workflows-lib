@@ -43,6 +43,15 @@ runs:
           echo "✅ Pre-release artifacts: $pre"
         }
 
+        # Explicitly disabled artifact builds (release-only repos)
+        if [ "$ARTIFACTS" = "none" ]; then
+          echo "artifacts=" >> "$GITHUB_OUTPUT"
+          echo "binary-type=" >> "$GITHUB_OUTPUT"
+          resolve_pre_release
+          echo "✅ Artifact builds disabled (none)"
+          exit 0
+        fi
+
         # If explicit artifacts provided (not auto), use them directly
         if [ "$ARTIFACTS" != "auto" ] && [ -n "$ARTIFACTS" ]; then
           echo "artifacts=$ARTIFACTS" >> "$GITHUB_OUTPUT"

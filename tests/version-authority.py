@@ -235,9 +235,14 @@ def main() -> int:
     release_job = entry["jobs"]["release"]
     release_job_text = ENTRYPOINT.read_text()
     check(
-        "entrypoint passes the resolved version to the release action",
-        "${{ needs.resolve.outputs.version }}" in release_job_text,
-        "expected the resolved version to be passed to release-github action",
+        "entrypoint calls the release-artifacts contract",
+        "uses: $/.github/workflows/release-artifacts.yml" in release_job_text,
+        "expected release.yml to delegate to release-artifacts.yml",
+    )
+    check(
+        "entrypoint passes the VERSION file to the release contract",
+        "version-source: VERSION" in release_job_text,
+        "expected the VERSION file to be the version source for release-artifacts.yml",
     )
     check(
         "entrypoint resolves before releasing",

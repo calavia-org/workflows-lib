@@ -65,30 +65,17 @@ jobs:
     name: Release
     needs: resolve
     if: needs.resolve.outputs.should-release == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
     permissions:
       contents: write
-    outputs:
-      version: ${{ steps.release.outputs.version }}
-      tag: ${{ steps.release.outputs.tag }}
-      release-url: ${{ steps.release.outputs.release-url }}
-      release-id: ${{ steps.release.outputs.release-id }}
-      release-type: ${{ steps.release.outputs.release-type }}
-      major-tag: ${{ steps.release.outputs.major-tag }}
-      skipped: ${{ steps.release.outputs.skipped }}
-    steps:
-      # Full history plus tag refs are required: the implementation annotates a tag
-      # and force-moves the floating major tag, both of which need real refs.
-      - name: Checkout release branch
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create tag and GitHub release
-        id: release
-        uses: $/.github/actions/release-github
-        with:
-          version: ${{ needs.resolve.outputs.version }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+    uses: $/.github/workflows/release-artifacts.yml
+    with:
+      version-source: VERSION
+      artifacts: none
+      publish-github-release: true
+      publish-ghcr: false
+      publish-package-manager: false
+      publish-helm-chart: false
+      update-floating-major-tag: true
+      generate-notes: true
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

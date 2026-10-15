@@ -24,14 +24,16 @@ calavia-org/workflows-lib/.github/actions/NAME@v0
 
 The workflows-lib repository uses a self-releasing pattern:
 
-1. `release.yml` watches for version bumps in source files (e.g., `galaxy.yml`, `package.json`)
-2. On push to `main` after a version change, `release.yml`:
+1. `release.yml` watches for version bumps in source files (e.g., `galaxy.yml`, `package.json`, `VERSION`)
+2. On push to `main` after a version change, `release.yml` calls `release-artifacts.yml` with `update-floating-major-tag: true`, which:
    - Creates a GitHub Release with the new version
    - Tags the repository (e.g., `v1.2.3`)
    - Updates the `v0` tag to point to the new release
 3. Consumers referencing `@v0` automatically get the latest stable version without manual updates
 
 This pattern ensures that consumers of `calavia-org/workflows-lib` always receive up-to-date actions when they reference `@v0`, while version-pinned references (e.g., `@v1.2.3`) remain stable for pinned consumers.
+
+Use `update-floating-major-tag: true` when your repository ships reusable workflows or actions that consumers pin with a floating major tag such as `@v1`.
 
 ## Technology Support
 
