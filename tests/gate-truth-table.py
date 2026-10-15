@@ -20,7 +20,7 @@ import sys
 
 import yaml
 
-WF = ".github/workflows/pr-check-and-test.yml"
+WF = ".github/workflows/reusable/pr-check-and-test.yml"
 STATUS_OK = {"success", "skipped"}
 GATE_STEP = "Verify required tests passed"
 

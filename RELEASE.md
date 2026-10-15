@@ -5,10 +5,10 @@ only by `bump-version`, and the release workflow only reads it.
 
 ## How It Works
 
-1. A PR is opened. `.github/workflows/pr.yml` calls the
+1. A PR is opened. `.github/workflows/self/pr.yml` calls the
    `version-bump.yml` contract, which reads `VERSION`, applies the bump, and
    pushes a `chore: bump version` commit to the branch.
-2. When the PR merges to `main`, `.github/workflows/release.yml` triggers.
+2. When the PR merges to `main`, `.github/workflows/self/release.yml` triggers.
 3. It reads `VERSION` and compares it against the latest tag. If they match,
    there is nothing to release and the job stops — idempotence follows from the
    version file, not from guessing at commit types.
@@ -38,10 +38,10 @@ Repositories consuming these workflows should reference version tags:
 <!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the references become valid once the release tags are moved to the commit that contains the new file. -->
 ```yaml
 # Floating major version (recommended)
-uses: calavia-org/workflows-lib/.github/workflows/version-bump.yml@v0
+uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v0
 
 # Specific version (for reproducibility)
-uses: calavia-org/workflows-lib/.github/workflows/version-bump.yml@v0.0.2
+uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v0.0.2
 ```
 
 ## Breaking Changes
@@ -51,10 +51,10 @@ Breaking changes trigger a major version bump. Consumers must manually update th
 <!-- doc-ref-test: skip — hypothetical before/after transition, so these majors are intentionally unpublished -->
 ```yaml
 # Before breaking change
-uses: calavia-org/workflows-lib/.github/workflows/version-bump.yml@v1
+uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v1
 
 # After breaking change
-uses: calavia-org/workflows-lib/.github/workflows/version-bump.yml@v2
+uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v2
 ```
 
 ## Emergency Manual Release

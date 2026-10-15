@@ -25,7 +25,7 @@ calavia-org/workflows-lib/.github/actions/NAME@v0
 The workflows-lib repository uses a self-releasing pattern:
 
 1. `release.yml` watches for version bumps in source files (e.g., `galaxy.yml`, `package.json`, `VERSION`)
-2. On push to `main` after a version change, `release.yml` calls `release-artifacts.yml` with `update-floating-major-tag: true`, which:
+2. On push to `main` after a version change, `self/release.yml` calls `reusable/release-artifacts.yml` with `update-floating-major-tag: true`, which:
    - Creates a GitHub Release with the new version
    - Tags the repository (e.g., `v1.2.3`)
    - Updates the `v0` tag to point to the new release
@@ -52,17 +52,17 @@ For Ansible collections, the workflow supports two artifact types:
 
 #### Required Inputs
 
+<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
-    uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable/release-artifacts.yml@v0
     with:
       technology: ansible
       artifacts: binary,docker
       ansible-collection-path: collections/ansible_collections/myorg/mycollection
       is-ansible-ee: true
       ee-definition-file: execution-environment.yml
-      ghcr-image-name: my-ee
 ```
 
 #### Required Files
@@ -163,10 +163,12 @@ On failure, the workflow can:
 ## Example Usage
 
 ### Ansible Collection + EE
+
+<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
-    uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable/release-artifacts.yml@v0
     with:
       technology: ansible
       artifacts: binary,docker
@@ -182,10 +184,12 @@ jobs:
 ```
 
 ### Java Application
+
+<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
-    uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable/release-artifacts.yml@v0
     with:
       technology: java
       artifacts: binary,docker
@@ -211,4 +215,4 @@ When `is-ansible-ee` is `true`:
 
 ## Inputs
 
-See [`release-artifacts.yml`](.github/workflows/release-artifacts.yml) for all available inputs.
+See [`release-artifacts.yml`](.github/workflows/reusable/release-artifacts.yml) for all available inputs.

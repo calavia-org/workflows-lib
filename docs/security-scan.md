@@ -41,7 +41,7 @@ upload SARIF results:
 ```yaml
 jobs:
   pr-check-and-test:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-test.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable/pr-check-and-test.yml@v0
     permissions:
       contents: write
       checks: write
