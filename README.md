@@ -12,14 +12,14 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 ## Technology Support
 
-### `ci.yml`
+### `reusable-ci.yml`
 - **Auto-detect**: Python, Node.js, Go, Rust, Java, Docker, Ansible, Generic
 - **Phases**: Pre-commit, lint, build, test (unit, integration, e2e), package, publish
 - **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)
 - **Reports**: Test results, coverage, SARIF uploads, PR comments
 - **Docs**: See [`docs/security-scan.md`](docs/security-scan.md)
 
-### `release-artifacts.yml`
+### `reusable-release-artifacts.yml`
 - **Auto-detect**: Version from `galaxy.yml`, `pom.xml`, `Chart.yml`, `package.json`, etc.
 - **Artifacts**: Binary, Docker, Helm (sequential builds with dependencies)
 - **Publish**: GitHub Release, GHCR, package managers, Helm chart repos
@@ -114,3 +114,7 @@ When adding new workflows:
 ## Release
 
 See [RELEASE.md](RELEASE.md) for versioning and release process.
+
+Upgrading across the breaking (major) release? See [MIGRATION.md](MIGRATION.md)
+for the renamed workflow paths, the `<caller> / Test` → `<caller> / Gate`
+required-check change, and the removed workflows.

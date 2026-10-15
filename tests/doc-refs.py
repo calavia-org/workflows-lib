@@ -45,6 +45,7 @@ REPO = "calavia-org/workflows-lib"
 DOCS = (
     "README.md",
     "RELEASE.md",
+    "MIGRATION.md",
     "docs/release-artifacts.md",
     "docs/version-bump.md",
 )
