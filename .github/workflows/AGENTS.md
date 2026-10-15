@@ -4,7 +4,7 @@
 
 ## OVERVIEW
 
-The product: 4 public reusable workflows (`workflow_call`) consumed org-wide via `@v0`, plus 2 internal workflows (`pr.yml`, `release.yml`) that run this repo's own PR checks, versioning, and release.
+The product: 4 public reusable workflows (`workflow_call`) consumed org-wide via `@v0`, plus 3 internal workflows (`pr.yml`, `release.yml`, `dependabot-auto-merge.yml`) that run this repo's own PR checks, versioning, release, and Dependabot auto-merge.
 
 ## WHERE TO LOOK
 
@@ -16,6 +16,7 @@ The product: 4 public reusable workflows (`workflow_call`) consumed org-wide via
 | `auto-merge-dependabot.yml` | PUBLIC: auto-merge Dependabot PRs tied to OPEN security advisories |
 | `pr.yml` | INTERNAL: on PR, runs `version-bump.yml` + `pr-check-and-test.yml` against this repo and verifies documented refs resolve to published tags |
 | `release.yml` | INTERNAL: on push to main, reads `VERSION`, creates the tag and GitHub Release |
+| `dependabot-auto-merge.yml` | INTERNAL: on Dependabot PRs, enables auto-merge for PRs linked to an open security advisory |
 
 ## CONVENTIONS
 

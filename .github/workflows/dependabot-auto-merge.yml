@@ -1,0 +1,24 @@
+name: Dependabot Auto-Merge
+
+# Internal entrypoint that enables auto-merge for Dependabot PRs tied to open
+# security advisories. It runs on pull_request_target so the reusable workflow
+# can look up the advisory linked to the PR and call `gh pr merge --auto`.
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot security PR
+    if: github.actor == 'dependabot[bot]'
+    uses: $/.github/workflows/auto-merge-dependabot.yml
+    with:
+      merge-method: squash
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
