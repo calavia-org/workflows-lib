@@ -26,7 +26,7 @@ import tempfile
 
 import yaml
 
-WF = ".github/workflows/reusable/version-bump.yml"
+WF = ".github/workflows/reusable-version-bump.yml"
 ACTION = ".github/actions/resolve-base-version/action.yml"
 DERIVE_STEP_ID = "resolve"
 COMMIT_STEP = "Commit and push version bump"

@@ -59,7 +59,7 @@ For squash merge workflows, the PR title is checked as fallback.
 
 <!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the reference becomes valid once the floating v0 tag is moved to the commit that contains it. -->
 ```yaml
-# .github/workflows/reusable/version-bump.yml in consumer repo
+# .github/workflows/reusable-version-bump.yml in consumer repo
 name: Version Bump
 
 on:
@@ -68,7 +68,7 @@ on:
 
 jobs:
   version-bump:
-    uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0
     with:
       allowed-branch-pattern: ""
       allowed-target-branches: "main,release/*"

@@ -56,21 +56,21 @@ repos:
         entry: pytest tests/gate-truth-table.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/reusable/pr-check-and-test\.yml|tests/gate-truth-table\.py)$'
+        files: '(\.github/workflows/reusable-pr-check-and-test\.yml|tests/gate-truth-table\.py)$'
 
       - id: bump-version-derivation
         name: verify the version bump cannot roll a release back
         entry: pytest tests/bump-version-derivation.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/reusable/version-bump\.yml|tests/bump-version-derivation\.py)$'
+        files: '(\.github/workflows/reusable-version-bump\.yml|tests/bump-version-derivation\.py)$'
 
       - id: bump-type-selection
         name: verify a mixed feat and fix PR cannot be downgraded to a patch bump
         entry: pytest tests/bump-type-selection.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/reusable/version-bump\.yml|tests/bump-type-selection\.py)$'
+        files: '(\.github/workflows/reusable-version-bump\.yml|tests/bump-type-selection\.py)$'
 
       - id: validate-actions
         name: verify composite action metadata resolves to real steps
@@ -98,14 +98,14 @@ repos:
         entry: pytest tests/version-authority.py
         language: system
         pass_filenames: false
-        files: '(^\.github/workflows/self/release\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/reusable/version-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
+        files: '(^\.github/workflows/self-release\.yml|^\.github/actions/release-github/action\.yml|^\.github/workflows/reusable-version-bump\.yml|^\.github/actions/bump-version/action\.yml|^VERSION$|tests/version-authority\.py)$'
 
       - id: bump-guard-state
         name: verify the bump guard detects an applied bump from PR state, not the last commit message
         entry: pytest tests/bump-guard-state.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/reusable/version-bump\.yml|tests/bump-guard-state\.py)$'
+        files: '(\.github/workflows/reusable-version-bump\.yml|tests/bump-guard-state\.py)$'
 
       - id: validate-branch
         name: verify branch validation accepts allowed patterns and rejects invalid ones
@@ -161,21 +161,21 @@ repos:
         entry: pytest tests/self-bump-branch-pattern.py
         language: system
         pass_filenames: false
-        files: '(\.github/workflows/self/pr\.yml|\.github/workflows/reusable/version-bump\.yml|tests/self-bump-branch-pattern\.py)$'
+        files: '(\.github/workflows/self-pr\.yml|\.github/workflows/reusable-version-bump\.yml|tests/self-bump-branch-pattern\.py)$'
 
       - id: select-pre-release-artifacts
         name: verify pre-release artifact selector only accepts binary artifacts
         entry: pytest tests/select-pre-release-artifacts.py
         language: system
         pass_filenames: false
-        files: '(\.github/actions/select-pre-release-artifacts/action\.yml|\.github/workflows/reusable/pr-check-and-test\.yml|tests/select-pre-release-artifacts\.py)$'
+        files: '(\.github/actions/select-pre-release-artifacts/action\.yml|\.github/workflows/reusable-pr-check-and-test\.yml|tests/select-pre-release-artifacts\.py)$'
 
       - id: verify-required-tests-passed
         name: verify the required-test gate cannot go green on a failing job
         entry: pytest tests/verify-required-tests-passed.py
         language: system
         pass_filenames: false
-        files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/reusable/pr-check-and-test\.yml|tests/verify-required-tests-passed\.py)$'
+        files: '(\.github/actions/verify-required-tests-passed/action\.yml|\.github/workflows/reusable-pr-check-and-test\.yml|tests/verify-required-tests-passed\.py)$'
 
       - id: local-action-refs
         name: verify reusable workflows reference their own actions via $/ not ./

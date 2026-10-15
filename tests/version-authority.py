@@ -26,9 +26,9 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ACTION = ROOT / ".github" / "actions" / "release-github" / "action.yml"
-ENTRYPOINT = ROOT / ".github" / "workflows" / "self" / "release.yml"
+ENTRYPOINT = ROOT / ".github" / "workflows" / "self-release.yml"
 VERSION_FILE = ROOT / "VERSION"
-BUMP_CONTRACT = ROOT / ".github" / "workflows" / "reusable" / "version-bump.yml"
+BUMP_CONTRACT = ROOT / ".github" / "workflows" / "reusable-version-bump.yml"
 BUMP_ACTION = ROOT / ".github" / "actions" / "bump-version" / "action.yml"
 
 
@@ -236,8 +236,8 @@ def main() -> int:
     release_job_text = ENTRYPOINT.read_text()
     check(
         "entrypoint calls the release-artifacts contract",
-        "uses: $/.github/workflows/reusable/release-artifacts.yml" in release_job_text,
-        "expected release.yml to delegate to reusable/release-artifacts.yml",
+        "uses: $/.github/workflows/reusable-release-artifacts.yml" in release_job_text,
+        "expected self-release.yml to delegate to reusable-release-artifacts.yml",
     )
     check(
         "entrypoint passes the VERSION file to the release contract",

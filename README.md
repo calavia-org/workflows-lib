@@ -6,9 +6,9 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 | Workflow | Purpose | Status |
 |----------|---------|--------|
-| [`version-bump.yml`](.github/workflows/reusable/version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
-| [`pr-check-and-test.yml`](.github/workflows/reusable/pr-check-and-test.yml) | Unified PR check, test, and security scanning workflow with technology auto-detection | Active |
-| [`release-artifacts.yml`](.github/workflows/reusable/release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
+| [`reusable-version-bump.yml`](.github/workflows/reusable-version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
+| [`reusable-pr-check-and-test.yml`](.github/workflows/reusable-pr-check-and-test.yml) | Unified PR check, test, and security scanning workflow with technology auto-detection | Active |
+| [`reusable-release-artifacts.yml`](.github/workflows/reusable-release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 
 ## Technology Support
 
@@ -48,7 +48,7 @@ Reference workflows using the `uses` keyword in your repository:
 ```yaml
 jobs:
   version-bump:
-    uses: calavia-org/workflows-lib/.github/workflows/reusable/version-bump.yml@v0
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -65,14 +65,14 @@ jobs:
 
 <!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
-uses: calavia-org/workflows-lib/.github/workflows/reusable/release-artifacts.yml@v0
+uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0
 ```
 
 **Production** (stable releases):
 
 <!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
-uses: calavia-org/workflows-lib/.github/workflows/reusable/release-artifacts.yml@v0.0.2
+uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0.0.2
 ```
 
 ## Development

@@ -67,7 +67,7 @@ jobs:
     if: needs.resolve.outputs.should-release == 'true'
     permissions:
       contents: write
-    uses: $/.github/workflows/reusable/release-artifacts.yml
+    uses: $/.github/workflows/reusable-release-artifacts.yml
     with:
       version-source: VERSION
       artifacts: none

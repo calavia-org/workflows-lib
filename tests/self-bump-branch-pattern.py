@@ -2,7 +2,7 @@
 """Verify the internal PR caller admits Dependabot branches and still bumps them.
 
 workflows-lib versions itself through `version-bump.yml` (see
-`.github/workflows/self/pr.yml`). That call sets `fail-on-invalid-branch: true`,
+`.github/workflows/self-pr.yml`). That call sets `fail-on-invalid-branch: true`,
 so a branch missing from `allowed-branch-pattern` makes the whole
 "Check PR and bump version" check go red — exactly what happened for
 `dependabot/github_actions/...` PRs, which could then never auto-merge.
@@ -29,7 +29,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-PR_WORKFLOW = ROOT / ".github/workflows/self/pr.yml"
+PR_WORKFLOW = ROOT / ".github/workflows/self-pr.yml"
 
 # A real Dependabot branch name, taken from the run that exposed the bug.
 DEPENDABOT_BRANCH = "dependabot/github_actions/github-actions-640176b5ab"
