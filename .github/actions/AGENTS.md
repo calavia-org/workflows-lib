@@ -24,7 +24,7 @@ Typical chain: `detect-technology → run-tests → detect-artifacts → build-*
 - `using: composite`; every step declares `shell: bash`; outputs via `echo "key=value" >> "$GITHUB_OUTPUT"`.
 - Inputs: `required: true` with no default, or `required: false` with an explicit default. Technology inputs use the shared vocabulary `java,nodejs,go,python,rust,ansible,generic`.
 - Failures: explicit `exit 1` (add `::error::` annotation before it, as `bump-version`/`release-github` do). No `set -e`.
-- Artifacts: `actions/upload-artifact@v6`, `retention-days: 7`, names tech-prefixed (`binary-<tech>-<version>`).
+- Artifacts: `actions/upload-artifact@v7`, `retention-days: 7`, names tech-prefixed (`binary-<tech>-<version>`).
 - Runtime versions (python 3.12, node 20, go 1.22, java 21) are hardcoded in BOTH `build-binary` and `run-tests` — a version change must land in both.
 - `tests/validate-actions.py` enforces the metadata contract (name/description, inputs read, outputs assigned, step-id refs resolve) as a pre-commit hook — a new action must pass it.
 

@@ -304,11 +304,15 @@ runs:
           fi
         fi
 
-        # Add test output format (skip for tox)
+        # tox runs pytest inside its own env, so pytest flags must be forwarded
+        # after a literal `--` (tox maps it to {posargs}). A bare --junitxml is
+        # swallowed by tox: no report is written and the Gate has nothing to publish.
         if [ "${{ inputs.test-report-format }}" == "junit" ]; then
           case "${{ inputs.technology }}" in
             python|ansible)
-              if [[ "$CMD" != *"tox"* ]]; then
+              if [[ "$CMD" == *"tox"* ]]; then
+                CMD="$CMD -- --junitxml=test-results.xml"
+              else
                 CMD="$CMD --junitxml=test-results.xml"
               fi
               ;;
