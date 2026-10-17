@@ -71,14 +71,33 @@ runs:
   steps:
     - name: Download test artifacts
       if: inputs.report-enabled == 'true'
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         path: ${{ inputs.test-results-path }}
         pattern: test-results-*
         merge-multiple: true
 
+    - name: Detect test result files
+      id: detect-results
+      if: inputs.report-enabled == 'true'
+      shell: bash
+      env:
+        RESULTS_PATH: ${{ inputs.test-results-path }}
+      run: |
+        FOUND=false
+        if [ -d "$RESULTS_PATH" ] && \
+           [ -n "$(find "$RESULTS_PATH" -type f -name '*.xml' -print -quit 2>/dev/null)" ]; then
+          FOUND=true
+        fi
+        echo "found=$FOUND" >> "$GITHUB_OUTPUT"
+        if [ "$FOUND" = "true" ]; then
+          echo "Test result files found in $RESULTS_PATH"
+        else
+          echo "::notice::No JUnit test result files in $RESULTS_PATH; skipping test-result publishing."
+        fi
+
     - name: Publish test results
-      if: inputs.publish-test-results == 'true' && inputs.report-enabled == 'true'
+      if: inputs.publish-test-results == 'true' && inputs.report-enabled == 'true' && steps.detect-results.outputs.found == 'true'
       uses: EnricoMi/publish-unit-test-result-action@v2
       with:
         files: |

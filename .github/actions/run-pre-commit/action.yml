@@ -53,7 +53,7 @@ runs:
 
     - name: Install mise and tools
       if: steps.detect-config.outputs.config_found == 'true'
-      uses: jdx/mise-action@v2
+      uses: jdx/mise-action@v5
 
     - name: Install pre-commit and test dependencies
       if: steps.detect-config.outputs.config_found == 'true'
