@@ -57,13 +57,20 @@ def step_by_name(name: str) -> dict:
     raise AssertionError(f"publish-reports has no step named {name!r}")
 
 
-def detect_script(results_path: Path) -> str:
-    script = step_by_id("detect-results")["run"]
+def resolve(value: str, results_path: Path) -> str:
+    return EXPR.sub(
+        lambda match: str(results_path) if match.group(1) == RESULTS_EXPR else "",
+        value,
+    )
 
-    def substitute(match: re.Match[str]) -> str:
-        return str(results_path) if match.group(1) == RESULTS_EXPR else ""
 
-    return EXPR.sub(substitute, script)
+def detect_script() -> str:
+    return step_by_id("detect-results")["run"]
+
+
+def detect_env(results_path: Path) -> dict[str, str]:
+    raw = step_by_id("detect-results").get("env") or {}
+    return {key: resolve(str(value), results_path) for key, value in raw.items()}
 
 
 def run_detect(prepare) -> tuple[str, str]:
@@ -77,9 +84,10 @@ def run_detect(prepare) -> tuple[str, str]:
         output.write_text("")
         env = dict(os.environ)
         env["GITHUB_OUTPUT"] = str(output)
+        env.update(detect_env(results))
 
         result = subprocess.run(
-            ["bash", "-c", detect_script(results)],
+            ["bash", "-c", detect_script()],
             cwd=workdir,
             env=env,
             capture_output=True,
@@ -148,12 +156,21 @@ def test_download_step_passes_only_supported_inputs():
     )
 
 
+def test_detect_step_has_no_run_interpolation():
+    script = detect_script()
+    assert not EXPR.search(script), (
+        "detect-results must not interpolate ${{ ... }} directly in run: "
+        "(Semgrep run-shell-injection); pass values through env: instead"
+    )
+
+
 def test_all():
     test_missing_dir_skips_with_notice()
     test_empty_dir_skips_with_notice()
     test_present_xml_enables_publishing()
     test_publish_step_is_gated_on_detection()
     test_download_step_passes_only_supported_inputs()
+    test_detect_step_has_no_run_interpolation()
     print("\npublish-reports-results OK")
 
 

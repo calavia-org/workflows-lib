@@ -81,8 +81,9 @@ runs:
       id: detect-results
       if: inputs.report-enabled == 'true'
       shell: bash
+      env:
+        RESULTS_PATH: ${{ inputs.test-results-path }}
       run: |
-        RESULTS_PATH="${{ inputs.test-results-path }}"
         FOUND=false
         if [ -d "$RESULTS_PATH" ] && \
            [ -n "$(find "$RESULTS_PATH" -type f -name '*.xml' -print -quit 2>/dev/null)" ]; then
