@@ -33,6 +33,11 @@ on:
         type: boolean
         required: false
         default: true
+      update-floating-major-tag:
+        description: 'Update floating major tag (e.g., v1) to point to this release'
+        type: boolean
+        required: false
+        default: false
       publish-github-release:
         description: 'Create GitHub Release'
         type: boolean
@@ -431,6 +436,36 @@ jobs:
           draft: ${{ inputs.release-draft }}
           generate-notes: ${{ inputs.generate-notes }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  update-floating-major-tag:
+    name: Update floating major tag
+    needs: [detect, publish-github-release]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    if: ${{ inputs.update-floating-major-tag && always() && needs.detect.result == 'success' && needs.publish-github-release.result == 'success' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+      - name: Move floating major tag
+        shell: bash
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          MAJOR="v$(echo "$VERSION" | cut -d. -f1)"
+          TAG="v$VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -f "$MAJOR" "$TAG"
+          git push origin "$MAJOR" --force
+
+          echo "Updated floating tag: $MAJOR -> $TAG"
 
   publish-ghcr:
     name: Publish to GHCR

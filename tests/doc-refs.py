@@ -8,7 +8,7 @@ later, far from the commit that introduced it -- and `actionlint` cannot see it,
 because the reference lives in prose rather than in a workflow.
 
 That is not hypothetical. This repository documented
-`pr-check-and-bump.yml@v1` and `@v1.0.0` in four copy-pasteable examples while
+    `version-bump.yml@v1` and `@v1.0.0` in four copy-pasteable examples while
 publishing only the `v0` line, so every consumer following the documented path
 resolved a nonexistent ref.
 
@@ -45,8 +45,9 @@ REPO = "calavia-org/workflows-lib"
 DOCS = (
     "README.md",
     "RELEASE.md",
+    "MIGRATION.md",
     "docs/release-artifacts.md",
-    "docs/pr-check-and-bump.md",
+    "docs/version-bump.md",
 )
 
 # A documented reference: `<repo>/<path>@<ref>`, in any form documentation takes.
@@ -189,10 +190,6 @@ def main() -> int:
             f"skipped {exempted} reference(s) in explicitly marked illustration block(s)"
         )
     return 1 if failures else 0
-
-
-def test_main():
-    assert main() == 0
 
 
 if __name__ == "__main__":

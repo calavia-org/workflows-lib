@@ -1,4 +1,4 @@
-# PR Check and Auto-Bump Workflow
+# Version Bump Workflow
 
 Validates PRs follow conventional commit format and automatically bumps version files based on semantic versioning.
 
@@ -57,17 +57,18 @@ For squash merge workflows, the PR title is checked as fallback.
 
 ## Usage Example
 
+<!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the reference becomes valid once the floating v0 tag is moved to the commit that contains it. -->
 ```yaml
-# .github/workflows/pr-check-and-bump.yml in consumer repo
-name: PR Check and Auto-Bump
+# .github/workflows/reusable-version-bump.yml in consumer repo
+name: Version Bump
 
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
 jobs:
-  pr-check-and-bump:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
+  version-bump:
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0
     with:
       allowed-branch-pattern: ""
       allowed-target-branches: "main,release/*"

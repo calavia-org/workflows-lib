@@ -59,15 +59,18 @@ runs:
       if: steps.detect-config.outputs.config_found == 'true'
       shell: bash
       run: |
-        mise exec -- pip install --upgrade pip
-        mise exec -- pip install pre-commit
+        # The mise-provided Python is externally managed (PEP 668), so install
+        # pre-commit into a local venv rather than the system/managed environment.
+        mise exec -- python -m venv .venv
+        .venv/bin/pip install --upgrade pip
+        .venv/bin/pip install pre-commit
         # Install the repo's own packaging + `test` extra so any local
         # `language: system` hooks can resolve local imports. Only repos WITH
         # packaging metadata can be installed editable; bare Ansible collections
         # and other non-Python repos have none, and an unconditional
         # `pip install -e ".[test]"` fails the whole job there.
         if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
-          mise exec -- pip install -e ".[test]"
+          .venv/bin/pip install -e ".[test]"
         else
           echo "No pyproject.toml/setup.py/setup.cfg at repo root; skipping editable install."
         fi
@@ -82,4 +85,7 @@ runs:
           ALL_FILES=""
         fi
 
-        mise exec -- pre-commit run $ALL_FILES --show-diff-on-failure ${{ inputs.args }}
+        # Make the venv tools (pre-commit, pytest, repo package) available to
+        # system-language pre-commit hooks that spawn subprocesses.
+        export PATH="$PWD/.venv/bin:$PATH"
+        pre-commit run $ALL_FILES --show-diff-on-failure ${{ inputs.args }}

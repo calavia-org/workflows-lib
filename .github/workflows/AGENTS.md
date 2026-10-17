@@ -4,20 +4,21 @@
 
 ## OVERVIEW
 
-The product: 6 public reusable workflows (`workflow_call`) consumed org-wide via `@v0`, plus 2 internal workflows (`release.yml`, `self-bump.yml`) that run this repo's own versioning and release.
+The product: 4 public reusable workflows (`workflow_call`) consumed org-wide via `@v0`, plus 3 internal workflows (`self-pr.yml`, `self-release.yml`, `self-dependabot-auto-merge.yml`) that run this repo's own PR checks, versioning, release, and Dependabot auto-merge.
+
+Public workflows use the `reusable-` prefix; repo-specific entrypoints use the `self-` prefix.
 
 ## WHERE TO LOOK
 
 | Workflow | Role |
 |----------|------|
-| `pr-check-and-bump.yml` | PUBLIC: conventional-commit validation + version-file bump (outputs `bump_type`, `should_bump`, ...) |
-| `pr-check-and-test.yml` | PUBLIC: unified PR pipeline, tech auto-detect, `Test` gate, optional pre-release |
-| `pr-check-github-action.yml` | PUBLIC: validate action repos (action.yml + actionlint) |
-| `release-artifacts.yml` | PUBLIC: multi-target release — binary/docker/EE/helm, signing, publish, rollback |
-| `release-github.yml` | PUBLIC: tag + GitHub Release + notes; moves the floating `v<major>` tag |
-| `auto-merge-dependabot.yml` | PUBLIC: auto-merge Dependabot PRs tied to OPEN security advisories |
-| `release.yml` | INTERNAL: on push to main, reads `VERSION`, calls `release-github.yml` |
-| `self-bump.yml` | INTERNAL: on PR, runs `pr-check-and-bump.yml` against this repo's `VERSION` |
+| `reusable-version-bump.yml` | PUBLIC: conventional-commit validation + version-file bump (outputs `bump_type`, `should_bump`, ...) |
+| `reusable-ci.yml` | PUBLIC: unified CI pipeline, tech auto-detect, `Gate` check, optional pre-release, built-in SAST/secret/misconfig/dependency scanning |
+| `reusable-release-artifacts.yml` | PUBLIC: multi-target release — binary/docker/EE/helm, signing, publish, rollback |
+| `reusable-auto-merge-dependabot.yml` | PUBLIC: auto-merge Dependabot PRs tied to OPEN security advisories |
+| `self-pr.yml` | INTERNAL: on PR, runs `reusable-version-bump.yml` + `reusable-ci.yml` against this repo and verifies documented refs resolve to published tags |
+| `self-release.yml` | INTERNAL: on push to main, reads `VERSION`, creates the tag and GitHub Release |
+| `self-dependabot-auto-merge.yml` | INTERNAL: on Dependabot PRs, enables auto-merge for PRs linked to an open security advisory |
 
 ## CONVENTIONS
 

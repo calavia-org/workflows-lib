@@ -5,19 +5,18 @@ only by `bump-version`, and the release workflow only reads it.
 
 ## How It Works
 
-1. A PR is opened. `.github/workflows/self-bump.yml` calls the
-   `pr-check-and-bump.yml` contract, which reads `VERSION`, applies the bump, and
+1. A PR is opened. `.github/workflows/self-pr.yml` calls the
+   `version-bump.yml` contract, which reads `VERSION`, applies the bump, and
    pushes a `chore: bump version` commit to the branch.
-2. When the PR merges to `main`, `.github/workflows/release.yml` triggers.
+2. When the PR merges to `main`, `.github/workflows/self-release.yml` triggers.
 3. It reads `VERSION` and compares it against the latest tag. If they match,
    there is nothing to release and the job stops — idempotence follows from the
    version file, not from guessing at commit types.
-4. Otherwise it calls the `release-github.yml` contract with that version, which
-   creates the tag (`vX.Y.Z`), updates the floating major tag, and creates a
-   GitHub Release.
+4. Otherwise the release job creates the tag (`vX.Y.Z`), updates the floating
+   major tag, and creates a GitHub Release.
 
 The version is never derived at release time. Conventional commits decide the
-*bump type* inside `pr-check-and-bump.yml`; the resulting number always comes
+*bump type* inside `version-bump.yml`; the resulting number always comes
 from the file, so a release can never disagree with the version consumers read.
 
 ## Version Bump Rules
@@ -36,12 +35,13 @@ security fix still needs a patch release.
 
 Repositories consuming these workflows should reference version tags:
 
+<!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the references become valid once the release tags are moved to the commit that contains the new file. -->
 ```yaml
 # Floating major version (recommended)
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
+uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0
 
 # Specific version (for reproducibility)
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0.0.2
+uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0.0.2
 ```
 
 ## Breaking Changes
@@ -51,10 +51,10 @@ Breaking changes trigger a major version bump. Consumers must manually update th
 <!-- doc-ref-test: skip — hypothetical before/after transition, so these majors are intentionally unpublished -->
 ```yaml
 # Before breaking change
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v1
+uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v1
 
 # After breaking change
-uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v2
+uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v2
 ```
 
 ## Emergency Manual Release

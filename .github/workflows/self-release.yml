@@ -9,7 +9,7 @@ name: Release
 # very release that publishes the fix.
 #
 # The version is never derived here. `VERSION` is owned by bump-version (wired
-# through pr-check-and-bump.yml), and this workflow only reads it, so there is a
+# through reusable-version-bump.yml), and this workflow only reads it, so there is a
 # single authority for what the current version is. Releasing is therefore a
 # consequence of the version file moving, not of guessing from commit types.
 on:
@@ -67,9 +67,15 @@ jobs:
     if: needs.resolve.outputs.should-release == 'true'
     permissions:
       contents: write
-    uses: $/.github/workflows/release-github.yml
+    uses: $/.github/workflows/reusable-release-artifacts.yml
     with:
-      version: ${{ needs.resolve.outputs.version }}
-      runner-label: ubuntu-24.04
+      version-source: VERSION
+      artifacts: none
+      publish-github-release: true
+      publish-ghcr: false
+      publish-package-manager: false
+      publish-helm-chart: false
+      update-floating-major-tag: true
+      generate-notes: true
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -9,10 +9,10 @@ target in the CALLER's workspace and dies with:
 
     Can't find 'action.yml' ... under '<caller>/.github/actions/<name>'
 
-Regression to guard: `pr-check-and-bump.yml` and `pr-check-github-action.yml`
-referenced their composite actions with `./`. workflows-lib's own PRs stayed
-green (there `./` happens to resolve to this repo), but every consumer of the
-floating `@v0` went red on the "Check PR" / lint jobs at once.
+Regression to guard: `version-bump.yml` used to reference its composite
+actions with `./`. workflows-lib's own PRs stayed green (there `./` happens to
+resolve to this repo), but every consumer of the floating `@v0` went red on the
+"Check PR" job at once.
 
 Only internal `./` references are rejected here. A pinned `$/...@ref` or a
 cross-repo `{owner}/{repo}@ref` is a separate concern.

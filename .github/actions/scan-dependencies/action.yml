@@ -1,0 +1,120 @@
+name: 'Scan Dependencies'
+description: 'Installs Google OSV-Scanner and scans lockfiles for known vulnerable dependencies, producing SARIF and blocking on findings.'
+
+inputs:
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+  severity:
+    description: 'Minimum severity to fail on (HIGH, MEDIUM, LOW). OSV-Scanner does not natively filter by severity; this input is reserved for future filtering and does not change behavior today.'
+    required: false
+    default: 'HIGH'
+  upload-sarif:
+    description: 'Upload the SARIF report to the GitHub Security tab'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for SARIF upload'
+    required: false
+    default: '${{ github.token }}'
+  extra-args:
+    description: 'Extra arguments passed to the OSV-Scanner CLI'
+    required: false
+    default: ''
+
+outputs:
+  sarif-path:
+    description: 'Path to the generated SARIF file'
+    value: ${{ steps.scan.outputs.sarif-path }}
+  findings:
+    description: 'Number of findings reported'
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install OSV-Scanner
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v osv-scanner >/dev/null 2>&1; then
+          echo "OSV-Scanner already installed: $(osv-scanner --version)"
+          exit 0
+        fi
+        echo "Installing OSV-Scanner..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ASSET_ARCH="amd64" ;;
+          aarch64|arm64) ASSET_ARCH="arm64" ;;
+          *) echo "::error::Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+        curl -sSL "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${ASSET_ARCH}" \
+          -o /usr/local/bin/osv-scanner
+        chmod +x /usr/local/bin/osv-scanner
+        echo "Installed: $(osv-scanner --version)"
+
+    - name: Scan dependencies
+      id: scan
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        set -euo pipefail
+        SARIF="osv-scanner-results.sarif"
+        echo "Scanning $SCAN_PATH for vulnerable dependencies..."
+        # OSV-Scanner exits non-zero when vulnerabilities are found, so we continue
+        # to capture the SARIF file and then decide whether to fail the step.
+        read -ra extra_args <<< "$EXTRA_ARGS"
+        osv-scanner \
+          --format sarif \
+          --output-file "$SARIF" \
+          --recursive \
+          "${extra_args[@]}" \
+          "$SCAN_PATH" || true
+        if [ ! -f "$SARIF" ]; then
+          # If the repo has no supported lockfile/manifest, the scanner exits
+          # before writing SARIF. Treat that as zero findings rather than a
+          # failure, but fail if a supported source exists and still no report.
+          SUPPORTED_LOCKFILES=(
+            "package-lock.json" "yarn.lock" "pnpm-lock.yaml"
+            "requirements.txt" "Pipfile.lock" "poetry.lock" "uv.lock"
+            "go.mod" "go.sum" "Cargo.lock" "Gemfile.lock" "composer.lock"
+            "packages.lock.json" "project.assets.json"
+            "pom.xml" "build.gradle" "build.gradle.kts" "gradle.lockfile"
+            "pubspec.lock" "mix.lock" "pdm.lock" "renv.lock" "flake.lock"
+            "buf.lock" "osv-scanner.toml"
+          )
+          FOUND=0
+          for f in "${SUPPORTED_LOCKFILES[@]}"; do
+            if [ -f "$f" ]; then
+              FOUND=1
+              break
+            fi
+          done
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No supported dependency lockfiles found; treating as zero findings."
+            echo '{"version": "2.1.0", "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json", "runs": [{"tool": {"driver": {"name": "osv-scanner", "informationUri": "https://github.com/google/osv-scanner"}}, "results": []}]}' > "$SARIF"
+          else
+            echo "::error::OSV-Scanner did not produce a SARIF file"
+            exit 1
+          fi
+        fi
+        COUNT=$(python3 -c "import json; print(len(json.load(open('$SARIF')).get('results', [])))" 2>/dev/null || echo "0")
+        echo "Findings: $COUNT"
+        echo "sarif-path=$SARIF" >> "$GITHUB_OUTPUT"
+        echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+        if [ "$COUNT" -ne 0 ]; then
+          echo "::error::$COUNT vulnerable dependency(ies) detected. See the SARIF report in the GitHub Security tab."
+          exit 1
+        fi
+        echo "✅ No OSV-Scanner findings."
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+        category: osv-scanner-dependencies
+        token: ${{ inputs.github-token }}

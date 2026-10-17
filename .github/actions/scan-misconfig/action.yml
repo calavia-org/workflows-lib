@@ -1,0 +1,94 @@
+name: 'Scan Misconfigurations'
+description: 'Installs Trivy and scans the repository for misconfigurations in Dockerfiles, Kubernetes manifests, Terraform, and cloud configs, producing SARIF and blocking on findings.'
+
+inputs:
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+  severity:
+    description: 'Minimum severity to fail on (HIGH, MEDIUM, LOW)'
+    required: false
+    default: 'HIGH'
+  upload-sarif:
+    description: 'Upload the SARIF report to the GitHub Security tab'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for SARIF upload'
+    required: false
+    default: '${{ github.token }}'
+  extra-args:
+    description: 'Extra arguments passed to the Trivy CLI'
+    required: false
+    default: ''
+
+outputs:
+  sarif-path:
+    description: 'Path to the generated SARIF file'
+    value: ${{ steps.scan.outputs.sarif-path }}
+  findings:
+    description: 'Number of findings reported'
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Trivy
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v trivy >/dev/null 2>&1; then
+          echo "Trivy already installed: $(trivy --version)"
+          exit 0
+        fi
+        echo "Installing Trivy..."
+        INSTALLER="/tmp/trivy-install.sh"
+        curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$INSTALLER"
+        chmod +x "$INSTALLER"
+        "$INSTALLER" -b /usr/local/bin
+        echo "Installed: $(trivy --version)"
+
+    - name: Scan for misconfigurations
+      id: scan
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SEVERITY: ${{ inputs.severity }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        set -euo pipefail
+        SARIF="trivy-misconfig-results.sarif"
+        SEV="${SEVERITY:-HIGH}"
+        echo "Scanning $SCAN_PATH for misconfigurations (severity >= $SEV)..."
+        # --exit-code 1 makes Trivy fail on findings, blocking the PR.
+        read -ra extra_args <<< "$EXTRA_ARGS"
+        trivy fs \
+          --scanners=misconfig \
+          --severity="$SEV" \
+          --format=sarif \
+          --output="$SARIF" \
+          --exit-code=1 \
+          "${extra_args[@]}" \
+          "$SCAN_PATH" || true
+        if [ ! -f "$SARIF" ]; then
+          echo "::error::Trivy did not produce a SARIF file"
+          exit 1
+        fi
+        COUNT=$(python3 -c "import json; print(len(json.load(open('$SARIF')).get('results', [])))" 2>/dev/null || echo "0")
+        echo "Findings: $COUNT"
+        echo "sarif-path=$SARIF" >> "$GITHUB_OUTPUT"
+        echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+        if [ "$COUNT" -ne 0 ]; then
+          echo "::error::$COUNT misconfiguration(s) detected. See the SARIF report in the GitHub Security tab."
+          exit 1
+        fi
+        echo "✅ No Trivy misconfiguration findings at or above $SEV severity."
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
+        category: trivy-misconfig
+        token: ${{ inputs.github-token }}

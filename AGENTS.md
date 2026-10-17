@@ -39,11 +39,9 @@ No LSP covers YAML workflows (Python LSP not installed); map derived from struct
 
 | Contract | Jobs | Key inputs | Outputs |
 |----------|------|------------|---------|
-| `pr-check-and-bump.yml` | check-pr, auto-bump-version | version-file, base-version-source, branch patterns | bump_type, should_bump, has_conventional, branch_valid, target_valid |
-| `pr-check-and-test.yml` | detect, pre-commit, build, unit, package, integration, pre-release, report | 40+ (tech, phases, caching, notifications) | none (PR comments/checks) |
+| `version-bump.yml` | check-pr, auto-bump-version | version-file, base-version-source, branch patterns | bump_type, should_bump, has_conventional, branch_valid, target_valid |
+| `ci.yml` | detect, pre-commit, build, unit, package, integration, pre-release, report | 40+ (tech, phases, caching, notifications) | none (PR comments/checks) |
 | `release-artifacts.yml` | 13 (detect→test→build→sign→publish→rollback) | 30+ (artifacts, targets, signing) | none |
-| `release-github.yml` | release | version (required), files, draft, skip-release-types | version, tag, release-url, major-tag, skipped |
-| `pr-check-github-action.yml` | detect, validate, lint, test | validate-action, run-lint, run-test | none |
 | `auto-merge-dependabot.yml` | auto-merge | merge-method | none |
 
 Most-referenced actions: `run-tests` (4 call sites), `detect-artifacts` (2), everything else 1. Internal callers reach contracts via `uses: $/...`.
@@ -52,7 +50,7 @@ Most-referenced actions: `run-tests` (4 call sites), `detect-artifacts` (2), eve
 
 - MINIMIZE CODE in this repo: every line carries a test obligation. Code that is absolutely needed ships with its tests in the same change, and those tests run in this repo's own PR checks (pre-commit hooks via pre-commit.ci, or a CI workflow for suites needing git history) — untested code does not merge.
 - Consumers pin `@v0` (floating, dev) or `@vX.Y.Z` (reproducible); internal references use `$/` only.
-- `VERSION` is written only by `bump-version` (via `pr-check-and-bump.yml`); `release.yml` reads it and compares to the latest tag — idempotence comes from the file, not commit-type guessing.
+- `VERSION` is written only by `bump-version` (via `version-bump.yml`); `release.yml` reads it and compares to the latest tag — idempotence comes from the file, not commit-type guessing.
 - Bump rules: `fix:` patch, `feat:` minor, `feat!:`/`BREAKING CHANGE:` major; `chore|docs|ci|test|refactor|perf|style/` branches check but skip the bump.
 - Floating major tag `v0` is force-moved atomically after each release — never delete-then-repush.
 - Org rules (branch naming, conventional commits, PR-only, squash) live in the org-level AGENTS.md at `~/Development/Github/AGENTS.md` and are not repeated here.

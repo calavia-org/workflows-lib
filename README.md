@@ -6,19 +6,20 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 | Workflow | Purpose | Status |
 |----------|---------|--------|
-| [`pr-check-and-bump.yml`](.github/workflows/pr-check-and-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
-| [`pr-check-and-test.yml`](.github/workflows/pr-check-and-test.yml) | Unified PR check and test workflow with technology auto-detection | Active |
-| [`release-artifacts.yml`](.github/workflows/release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
+| [`reusable-version-bump.yml`](.github/workflows/reusable-version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
+| [`reusable-ci.yml`](.github/workflows/reusable-ci.yml) | Unified CI pipeline (pre-commit, build, tests, security scanning, optional pre-release) with technology auto-detection | Active |
+| [`reusable-release-artifacts.yml`](.github/workflows/reusable-release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 
 ## Technology Support
 
-### `pr-check-and-test.yml`
+### `reusable-ci.yml`
 - **Auto-detect**: Python, Node.js, Go, Rust, Java, Docker, Ansible, Generic
 - **Phases**: Pre-commit, lint, build, test (unit, integration, e2e), package, publish
-- **Reports**: Test results, coverage, PR comments
-- **Docs**: See [`docs/pr-check-and-test.md`](docs/pr-check-and-test.md)
+- **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)
+- **Reports**: Test results, coverage, SARIF uploads, PR comments
+- **Docs**: See [`docs/security-scan.md`](docs/security-scan.md)
 
-### `release-artifacts.yml`
+### `reusable-release-artifacts.yml`
 - **Auto-detect**: Version from `galaxy.yml`, `pom.xml`, `Chart.yml`, `package.json`, etc.
 - **Artifacts**: Binary, Docker, Helm (sequential builds with dependencies)
 - **Publish**: GitHub Release, GHCR, package managers, Helm chart repos
@@ -30,23 +31,24 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 
 This repository is designed to grow. Future additions may include:
 - Terraform infrastructure automation
-- Security scanning workflows
+- Release-time SBOM, provenance, and artifact vulnerability scanning
 - Documentation generation workflows
 
 ## Dependencies
 
 | Dependency | Repository | Purpose |
 |------------|------------|---------|
-| Version bumping | [`bump-version`](.github/actions/bump-version) | Composite action used inside `pr-check-and-bump.yml` |
+| Version bumping | [`bump-version`](.github/actions/bump-version) | Composite action used inside `version-bump.yml` |
 
 ## Usage
 
 Reference workflows using the `uses` keyword in your repository:
 
+<!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the reference becomes valid once the floating v0 tag is moved to the commit that contains it. -->
 ```yaml
 jobs:
-  pr-check:
-    uses: calavia-org/workflows-lib/.github/workflows/pr-check-and-bump.yml@v0
+  version-bump:
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-version-bump.yml@v0
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -60,13 +62,17 @@ jobs:
 ### Development vs Production
 
 **Development** (consumer repositories):
+
+<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
-uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0
+uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0
 ```
 
 **Production** (stable releases):
+
+<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
-uses: calavia-org/workflows-lib/.github/workflows/release-artifacts.yml@v0.0.2
+uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0.0.2
 ```
 
 ## Development
@@ -100,7 +106,7 @@ mise exec -- tox
 
 When adding new workflows:
 1. Use `workflow_call` trigger for reusability
-2. Create a dedicated documentation file (see `docs/pr-check-and-bump.md` as example)
+2. Create a dedicated documentation file (see `docs/version-bump.md` as example)
 3. Add or extend a pytest-collectable invariant suite in `tests/`
 4. Update this README to list the new workflow
 5. Test in a consumer repository before releasing
@@ -108,3 +114,7 @@ When adding new workflows:
 ## Release
 
 See [RELEASE.md](RELEASE.md) for versioning and release process.
+
+Upgrading across the breaking (major) release? See [MIGRATION.md](MIGRATION.md)
+for the renamed workflow paths, the `<caller> / Test` → `<caller> / Gate`
+required-check change, and the removed workflows.

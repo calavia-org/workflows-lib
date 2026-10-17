@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify how pr-check-and-bump.yml derives the base version for a bump.
+"""Verify how version-bump.yml derives the base version for a bump.
 
 The derivation logic is EXTRACTED FROM THE WORKFLOW and executed with bash
 against synthetic tag sets, so this tests the shipped shell rather than a
@@ -26,7 +26,7 @@ import tempfile
 
 import yaml
 
-WF = ".github/workflows/pr-check-and-bump.yml"
+WF = ".github/workflows/reusable-version-bump.yml"
 ACTION = ".github/actions/resolve-base-version/action.yml"
 DERIVE_STEP_ID = "resolve"
 COMMIT_STEP = "Commit and push version bump"

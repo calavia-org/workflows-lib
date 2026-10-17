@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the required `Test` gate in pr-check-and-test.yml.
+"""Verify the required `Gate` check in ci.yml.
 
 The gate logic is EXTRACTED FROM THE WORKFLOW and executed with bash, so this
 tests the shipped shell rather than a transcription of it. Job `if` expressions
@@ -20,7 +20,7 @@ import sys
 
 import yaml
 
-WF = ".github/workflows/pr-check-and-test.yml"
+WF = ".github/workflows/reusable-ci.yml"
 STATUS_OK = {"success", "skipped"}
 GATE_STEP = "Verify required tests passed"
 
@@ -147,7 +147,8 @@ def main():
         "unit": ["detect", "build"],
         "package": ["detect", "build"],
         "integration": ["detect", "package"],
-        "report": ["unit", "integration", "build", "package", "pre-commit"],
+        "security": ["detect"],
+        "report": ["unit", "integration", "build", "package", "pre-commit", "security"],
         "pre-release": ["report"],
     }
     for job, deps in expected.items():
@@ -167,6 +168,7 @@ def main():
         "BUILD_RESULT",
         "PACKAGE_RESULT",
         "PRE_COMMIT_RESULT",
+        "SECURITY_RESULT",
     ):
         if token not in script:
             print(f"FAIL: gate script never reads {token}")
@@ -194,7 +196,7 @@ def main():
         good = passed == expect_pass
         ok_all &= good
         print(
-            f"  {'ok ' if good else 'FAIL'} {label:<36} Test "
+            f"  {'ok ' if good else 'FAIL'} {label:<36} Gate "
             f"{'passes' if passed else 'fails'} (expected "
             f"{'pass' if expect_pass else 'fail'})"
         )
@@ -202,7 +204,7 @@ def main():
             print("        " + out.replace("\n", "\n        "))
 
     print("a red prerequisite must turn the gate red:")
-    for job in ("unit", "integration", "build", "package", "pre-commit"):
+    for job in ("unit", "integration", "build", "package", "pre-commit", "security"):
         scenario(f"{job} fails", {job}, expect_pass=False, **{"run-package": True})
 
     # The `expected` drift check above already guards the `needs` edge. This
@@ -273,6 +275,7 @@ def main():
         ("integration disabled", "integration", {"run_integration_tests": False}),
         ("build disabled", "build", {"run_build": False}),
         ("package disabled", "package", {"run_package": False}),
+        ("security disabled", "security", {"run_security_scans": False}),
     ):
         r = run(jobs, dict(defaults, **over), set(), script=script, env_exprs=env_exprs)
         passed, out = run_gate(script, r, env_exprs)
@@ -280,7 +283,7 @@ def main():
         ok_all &= good
         print(
             f"  {'ok ' if good else 'FAIL'} {label:<36} {job}={r[job]} "
-            f"Test={'passes' if passed else 'fails'} (expected skipped/passes)"
+            f"Gate={'passes' if passed else 'fails'} (expected skipped/passes)"
         )
         if not good:
             print("        " + out.replace("\n", "\n        "))
