@@ -83,7 +83,6 @@ git push origin v0 --force
 > The floating major tag is force-moved in a single step. Do not delete it first:
 > a delete-then-repush sequence leaves a window where consumers pinning `@v0`
 > resolve to nothing and the workflow reference fails to load.
-
 > Never tag a version that `VERSION` does not contain. The release workflow
 > refuses to run on a `VERSION` that is not a clean `X.Y.Z`, and it will attempt
 > a release again on the next push until the two agree.
