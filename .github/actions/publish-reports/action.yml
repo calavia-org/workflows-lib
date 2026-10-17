@@ -76,7 +76,6 @@ runs:
         path: ${{ inputs.test-results-path }}
         pattern: test-results-*
         merge-multiple: true
-        if-no-files-found: ignore
 
     - name: Detect test result files
       id: detect-results

@@ -22,6 +22,21 @@ REPO = Path(__file__).resolve().parent.parent
 ACTION = REPO / ".github/actions/publish-reports/action.yml"
 EXPR = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 RESULTS_EXPR = "inputs.test-results-path"
+# actions/download-artifact inputs (v8). Notably it has NO `if-no-files-found`
+# (that is upload-artifact only) and needs none: a pattern with zero matches
+# succeeds with "Found 0 artifact(s)", it does not fail.
+DOWNLOAD_ARTIFACT_INPUTS = {
+    "name",
+    "artifact-ids",
+    "path",
+    "pattern",
+    "merge-multiple",
+    "github-token",
+    "repository",
+    "run-id",
+    "skip-decompress",
+    "digest-mismatch",
+}
 
 
 def action_steps() -> list[dict]:
@@ -124,11 +139,21 @@ def test_publish_step_is_gated_on_detection():
     )
 
 
+def test_download_step_passes_only_supported_inputs():
+    with_ = step_by_name("Download test artifacts").get("with") or {}
+    unsupported = set(with_) - DOWNLOAD_ARTIFACT_INPUTS
+    assert not unsupported, (
+        f"download-artifact does not support {sorted(unsupported)}; supported "
+        f"inputs are {sorted(DOWNLOAD_ARTIFACT_INPUTS)}"
+    )
+
+
 def test_all():
     test_missing_dir_skips_with_notice()
     test_empty_dir_skips_with_notice()
     test_present_xml_enables_publishing()
     test_publish_step_is_gated_on_detection()
+    test_download_step_passes_only_supported_inputs()
     print("\npublish-reports-results OK")
 
 
