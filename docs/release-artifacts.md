@@ -12,7 +12,7 @@ Composite actions used by this workflow are referenced remotely from external re
 
 All composite actions use the format:
 
-```
+```text
 calavia-org/workflows-lib/.github/actions/NAME@v0
 ```
 
@@ -74,6 +74,7 @@ jobs:
 ### Java
 
 Supports Maven and Gradle builds:
+
 - `mvn package -DskipTests`
 - `gradle build -x test`
 
@@ -110,6 +111,7 @@ Supports Maven and Gradle builds:
 ## Version Detection
 
 The workflow auto-detects version from (in priority order):
+
 1. `galaxy.yml` (Ansible)
 2. `pom.xml` (Java)
 3. `Chart.yml` (Helm)
@@ -122,7 +124,8 @@ The workflow auto-detects version from (in priority order):
 ## Artifact Dependencies
 
 Builds execute sequentially:
-```
+
+```text
 build-binary
   └── build-docker (needs build-binary)
         └── build-helm (needs build-docker)
@@ -138,6 +141,7 @@ build-binary
 ## Release Notes
 
 Auto-generated from conventional commits:
+
 - 🚀 Features (`feat:`)
 - 🐛 Bug Fixes (`fix:`)
 - 📝 Documentation (`docs:`)
@@ -155,6 +159,7 @@ Auto-generated from conventional commits:
 ## Rollback
 
 On failure, the workflow can:
+
 - Delete GitHub Release
 - Delete GHCR images
 - Revert package manager publish
@@ -209,6 +214,7 @@ jobs:
 | `ee-definition-file` | string | `'execution-environment.yml'` | Path to execution-environment.yml definition file |
 
 When `is-ansible-ee` is `true`:
+
 - The Docker build step uses `ansible-builder` instead of `docker build`
 - The EE image is built using the specified `execution-environment.yml`
 - The image is tagged with the version and pushed to GHCR

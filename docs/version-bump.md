@@ -26,6 +26,7 @@ Validates PRs follow conventional commit format and automatically bumps version 
 ## Outputs
 
 This workflow commits version bumps directly to the PR branch. It outputs:
+
 - Bumped version file (detected or specified)
 - Version bump commit on PR branch
 
