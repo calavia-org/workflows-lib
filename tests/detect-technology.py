@@ -41,6 +41,8 @@ ACTION = (
 )
 
 MISE_WARNING = "::warning::mise.toml not found — add one to declare the toolchain"
+TOX_NO_FILE_WARNING = "no tox file found"
+TOX_NO_ENVS_WARNING = "declares no py<version> envs"
 
 # A galaxy.yml as produced by `ansible-galaxy collection init`: notably no
 # `type:` field, which is why detection must key on the file's presence.
@@ -76,11 +78,13 @@ def mise_json(*tools: str) -> str:
 
 
 # fixture name -> {
-#   files:  files to create in the synthetic repo
-#   mise:   optional `mise ls --json` payload exposed through a stub `mise`
-#   env:    optional environment overrides for the action step
-#   expect: expected GITHUB_OUTPUT key -> value
-#   warns:  optional override for the expected missing-mise.toml warning
+#   files:     files to create in the synthetic repo
+#   mise:      optional `mise ls --json` payload exposed through a stub `mise`
+#   env:       optional environment overrides for the action step
+#   expect:    expected GITHUB_OUTPUT key -> value
+#   warns:     optional override for the expected missing-mise.toml warning
+#   warns_tox: optional expected tox warning substring; defaults to the
+#              missing-file warning when python is declared without a tox file
 # }
 CASES: dict[str, dict] = {
     # --- mise-first: the declared toolchain is the authority -------------
@@ -212,6 +216,73 @@ CASES: dict[str, dict] = {
         "mise": mise_json("python", "node"),
         "expect": {"primary": "python", "count": "2"},
     },
+    # --- python-matrix ---------------------------------------------------
+    "matrix-from-tox-env-list": {
+        "files": {
+            "mise.toml": MISE_TOML_PYTHON,
+            "tox.ini": "[tox]\nenv_list = py310,py311,py312\n",
+        },
+        "mise": mise_json("python"),
+        "expect": {
+            "primary": "python",
+            "python-matrix": '["3.10", "3.11", "3.12"]',
+        },
+    },
+    "matrix-from-legacy-envlist": {
+        "files": {
+            "mise.toml": MISE_TOML_PYTHON,
+            "tox.ini": "[tox]\nenvlist = py39,py310\n",
+        },
+        "mise": mise_json("python"),
+        "expect": {"python-matrix": '["3.9", "3.10"]'},
+    },
+    "matrix-from-multiline-env-list": {
+        "files": {
+            "mise.toml": MISE_TOML_PYTHON,
+            "tox.ini": "[tox]\nenv_list =\n    py310\n    py313\n\n[testenv]\ncommands = pytest\n",
+        },
+        "mise": mise_json("python"),
+        "expect": {"python-matrix": '["3.10", "3.13"]'},
+    },
+    # tox-ansible.ini counts when the configured tox.ini is absent.
+    "matrix-from-tox-ansible-ini": {
+        "files": {
+            "mise.toml": MISE_TOML_PYTHON,
+            "tox-ansible.ini": "[tox]\nenv_list = py310\n",
+        },
+        "mise": mise_json("python"),
+        "expect": {"python-matrix": '["3.10"]'},
+    },
+    # No tox file: single-version fallback plus a warning naming both candidates.
+    "matrix-without-tox-file-falls-back": {
+        "files": {"mise.toml": MISE_TOML_PYTHON},
+        "mise": mise_json("python"),
+        "expect": {"python-matrix": '["3.12"]'},
+        "warns_tox": "no tox file found",
+    },
+    # A tox env list with no py<version> tokens cannot build a matrix either.
+    "matrix-with-no-py-envs-falls-back": {
+        "files": {
+            "mise.toml": MISE_TOML_PYTHON,
+            "tox.ini": "[tox]\nenv_list = lint\n",
+        },
+        "mise": mise_json("python"),
+        "expect": {"python-matrix": '["3.12"]'},
+        "warns_tox": "declares no py<version> envs",
+    },
+    # The fallback version is the action input, not a hardcoded value.
+    "matrix-fallback-uses-python-version-input": {
+        "files": {"mise.toml": MISE_TOML_PYTHON},
+        "mise": mise_json("python"),
+        "env": {"PYTHON_VERSION": "3.11"},
+        "expect": {"python-matrix": '["3.11"]'},
+    },
+    # Non-python repos still get a one-element matrix so the unit job runs.
+    "matrix-non-python-single-version": {
+        "files": {"mise.toml": '[tools]\ngo = "1.22"\n'},
+        "mise": mise_json("go"),
+        "expect": {"python-matrix": '["3.12"]'},
+    },
 }
 
 
@@ -301,6 +372,24 @@ def main() -> int:
             failures.append(
                 f"{name}: mise warning expected {expect_warning}, got {warned}"
             )
+        python_declared = (
+            any(expected.get(key) for key in ("python", "ansible-beats-python"))
+            or "mise.toml" in files
+            and "python" in str(files.get("mise.toml", ""))
+        )
+        tox_file = "tox.ini" in files or "tox-ansible.ini" in files
+        expect_tox_warning = case.get(
+            "warns_tox",
+            "no tox file found" if python_declared and not tox_file else None,
+        )
+        combined = f"{stdout}{stderr}"
+        if expect_tox_warning:
+            if expect_tox_warning not in combined:
+                failures.append(
+                    f"{name}: tox warning {expect_tox_warning!r} missing from output"
+                )
+        elif TOX_NO_FILE_WARNING in combined or TOX_NO_ENVS_WARNING in combined:
+            failures.append(f"{name}: unexpected tox warning in output")
 
     if failures:
         print(f"detection FAILED ({len(failures)} problem(s)):")
