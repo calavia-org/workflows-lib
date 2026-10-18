@@ -22,7 +22,11 @@ repos:
     rev: v0.41.0
     hooks:
       - id: markdownlint
-        args: ['--disable', 'MD013', 'MD033', 'MD041']
+        # The trailing `--` ends option parsing. markdownlint-cli's
+        # `--disable <rules...>` is variadic, so without it the option swallows
+        # the filenames pre-commit appends: markdownlint then prints its usage
+        # and exits 0, so the hook silently lints nothing.
+        args: ['--disable', 'MD013', 'MD033', 'MD041', '--']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.0

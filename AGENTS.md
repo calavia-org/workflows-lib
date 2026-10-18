@@ -12,7 +12,7 @@
 
 ## STRUCTURE
 
-```
+```text
 workflows-lib/
 ├── .github/workflows/   # the public reusable workflows + internal self-* (see its AGENTS.md)
 ├── .github/actions/     # 21 composite actions, internal implementation (see its AGENTS.md)

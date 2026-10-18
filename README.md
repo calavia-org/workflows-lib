@@ -13,6 +13,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 ## Technology Support
 
 ### `reusable-ci.yml`
+
 - **Auto-detect**: Python, Node.js, Go, Rust, Java, Docker, Ansible, Generic
 - **Phases**: Pre-commit, lint, build, test (unit, integration, e2e), package, publish
 - **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)
@@ -20,6 +21,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 - **Docs**: See [`docs/security-scan.md`](docs/security-scan.md)
 
 ### `reusable-release-artifacts.yml`
+
 - **Auto-detect**: Version from `galaxy.yml`, `pom.xml`, `Chart.yml`, `package.json`, etc.
 - **Artifacts**: Binary, Docker, Helm (sequential builds with dependencies)
 - **Publish**: GitHub Release, GHCR, package managers, Helm chart repos
@@ -30,6 +32,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 ## Planned Workflows
 
 This repository is designed to grow. Future additions may include:
+
 - Terraform infrastructure automation
 - Release-time SBOM, provenance, and artifact vulnerability scanning
 - Documentation generation workflows
@@ -105,6 +108,7 @@ mise exec -- tox
 ## Contributing
 
 When adding new workflows:
+
 1. Use `workflow_call` trigger for reusability
 2. Create a dedicated documentation file (see `docs/version-bump.md` as example)
 3. Add or extend a pytest-collectable invariant suite in `tests/`
