@@ -202,6 +202,13 @@ repos:
         pass_filenames: false
         files: '(\.github/actions/run-tests/action\.yml|tests/run-tests-junit\.py)$'
 
+      - id: python-matrix-wiring
+        name: verify the unit matrix derives from the tox env list and tox-ansible installs by conf name
+        entry: pytest tests/python-matrix-wiring.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/workflows/reusable-ci\.yml|\.github/actions/run-tests/action\.yml|tests/python-matrix-wiring\.py)$'
+
       - id: publish-reports-results
         name: verify publish-reports skips quietly when no test results exist
         entry: pytest tests/publish-reports-results.py

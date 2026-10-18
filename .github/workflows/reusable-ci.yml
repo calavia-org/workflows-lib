@@ -276,6 +276,9 @@ jobs:
     outputs:
       technologies: ${{ steps.detect.outputs.technologies }}
       primary: ${{ steps.detect.outputs.primary }}
+      # Derived from the tox env list; single-version fallback for non-Python
+      # repos or a missing tox file, so the unit matrix is never empty.
+      python-matrix: ${{ steps.detect.outputs.python-matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -290,6 +293,8 @@ jobs:
         id: detect
         with:
           fail-on-missing: ${{ inputs.fail-on-missing }}
+          tox-ini: ${{ inputs.tox-ini }}
+          python-version: ${{ inputs.python-version }}
 
   pre-commit:
     name: Pre-Commit
@@ -375,6 +380,11 @@ jobs:
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
+      # One leg per Python version declared in the tox env list; consumers
+      # require only the aggregated Gate check, so per-version job names are
+      # safe. The detect fallback keeps the matrix non-empty.
+      matrix:
+        python-version: ${{ fromJSON(needs.detect.outputs.python-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -387,7 +397,7 @@ jobs:
           run-integration-tests: false
           run-e2e-tests: false
           test-command: ${{ inputs.test-command }}
-          python-version: ${{ inputs.python-version }}
+          python-version: ${{ matrix.python-version }}
           node-version: ${{ inputs.node-version }}
           go-version: ${{ inputs.go-version }}
           rust-toolchain: ${{ inputs.rust-toolchain }}

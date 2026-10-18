@@ -184,7 +184,10 @@ runs:
           # Ubuntu 24.04+ Python is externally managed; --break-system-packages
           # is acceptable on ephemeral CI runners where we just need the tool.
           python -m pip install --quiet --break-system-packages tox
-          if [ "${{ inputs.technology }}" == "ansible" ]; then
+          # The --ansible flag and ansible-* envs come from the tox-ansible
+          # plugin, which must be installed whenever the conf file is a
+          # tox-ansible config — not only when technology resolved to ansible.
+          if [ "${{ inputs.technology }}" == "ansible" ] || [ "$(basename "${{ inputs.tox-ini }}")" == "tox-ansible.ini" ]; then
             python -m pip install --quiet --break-system-packages tox-ansible
           fi
         fi
