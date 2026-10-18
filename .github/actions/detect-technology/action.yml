@@ -5,6 +5,10 @@ inputs:
     description: 'Fail if no technologies detected'
     required: false
     default: 'false'
+  warn-on-missing-mise:
+    description: 'Warn if mise.toml is missing'
+    required: false
+    default: 'true'
 outputs:
   technologies:
     description: 'Comma-separated list of detected technologies'
@@ -45,12 +49,18 @@ outputs:
   primary:
     description: 'Primary technology, in the vocabulary consumed by run-tests'
     value: ${{ steps.detect.outputs.primary }}
+  mise:
+    description: 'Path to mise.toml (empty if not detected)'
+    value: ${{ steps.detect.outputs.mise }}
 runs:
   using: composite
   steps:
     - name: Detect technologies
       id: detect
       shell: bash
+      env:
+        FAIL_ON_MISSING: ${{ inputs.fail-on-missing }}
+        WARN_ON_MISSING_MISE: ${{ inputs.warn-on-missing-mise }}
       run: |
         TECHS=""
         COUNT=0
@@ -64,63 +74,100 @@ runs:
         HELM=""
         NODEJS=""
         GENERIC=""
+        MISE=""
 
-        # Python detection
-        if [ -f "pyproject.toml" ]; then
-          PYTHON="pyproject.toml"
-        elif [ -f "setup.py" ]; then
-          PYTHON="setup.py"
-        elif [ -f "setup.cfg" ]; then
-          PYTHON="setup.cfg"
-        elif [ -f "requirements.txt" ]; then
-          PYTHON="requirements.txt"
-        elif [ -f "Pipfile" ]; then
-          PYTHON="Pipfile"
+        # Check for mise.toml
+        if [ -f "mise.toml" ]; then
+          MISE="mise.toml"
         fi
 
-        if [ -n "$PYTHON" ]; then
-          TECHS="python,${TECHS}"
-          COUNT=$((COUNT + 1))
+        if [ -z "$MISE" ] && [ "$WARN_ON_MISSING_MISE" == "true" ]; then
+          echo "::warning::mise.toml not found — add one to declare the toolchain"
         fi
 
-        # Go detection
-        if [ -f "go.mod" ]; then
-          GO="go.mod"
-          TECHS="go,${TECHS}"
-          COUNT=$((COUNT + 1))
+        # Read the declared toolchain from mise (mise-first). Only repositories
+        # that ship a mise.toml are read, so a runner's global mise config can
+        # never leak a technology into a repo that declares none.
+        MISE_TECHS=""
+        if [ -n "$MISE" ] && command -v mise >/dev/null 2>&1; then
+          export MISE_TRUSTED_CONFIG_PATHS="$PWD"
+          MISE_JSON="$(mise ls --json 2>/dev/null || true)"
+          if [ -n "$MISE_JSON" ]; then
+            MISE_TECHS=$(MISE_JSON="$MISE_JSON" python3 - <<'PY' 2>/dev/null || true
+        import json
+        import os
+
+        # mise shortnames -> the vocabulary run-tests branches on.
+        MAPPING = {"python": "python", "node": "nodejs", "go": "go", "rust": "rust", "java": "java"}
+
+        declared = json.loads(os.environ["MISE_JSON"])
+        technologies = []
+        for tool in declared:
+            technology = MAPPING.get(tool.lower(), tool.lower())
+            if technology not in technologies:
+                technologies.append(technology)
+        print(",".join(technologies))
+        PY
+        )
+          fi
         fi
 
-        # Rust detection
-        if [ -f "Cargo.toml" ]; then
-          RUST="Cargo.toml"
-          TECHS="rust,${TECHS}"
-          COUNT=$((COUNT + 1))
+        # Add mise-derived technologies (non-primary kinds like bun etc are recorded but won't become primary)
+        if [ -n "$MISE_TECHS" ]; then
+          # We'll process each to set specific outputs where applicable
+          IFS=',' read -ra MT <<< "$MISE_TECHS"
+          for t in "${MT[@]}"; do
+            case "$t" in
+              python)
+                if [ -z "$PYTHON" ]; then PYTHON="mise.toml"; fi
+                if [[ ! "$TECHS" =~ (^|,)python(,|$) ]]; then
+                  TECHS="python,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+              nodejs)
+                if [ -z "$NODEJS" ]; then NODEJS="mise.toml"; fi
+                if [[ ! "$TECHS" =~ (^|,)nodejs(,|$) ]]; then
+                  TECHS="nodejs,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+              go)
+                if [ -z "$GO" ]; then GO="mise.toml"; fi
+                if [[ ! "$TECHS" =~ (^|,)go(,|$) ]]; then
+                  TECHS="go,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+              rust)
+                if [ -z "$RUST" ]; then RUST="mise.toml"; fi
+                if [[ ! "$TECHS" =~ (^|,)rust(,|$) ]]; then
+                  TECHS="rust,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+              java)
+                if [ -z "$JAVA" ]; then JAVA="mise.toml"; fi
+                if [[ ! "$TECHS" =~ (^|,)java(,|$) ]]; then
+                  TECHS="java,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+              *)
+                # Record other mise tools verbatim if not already present
+                if [[ ! "$TECHS" =~ (^|,)$t(,|$) ]]; then
+                  TECHS="$t,${TECHS}"; COUNT=$((COUNT+1))
+                fi
+                ;;
+            esac
+          done
         fi
 
-        # Java detection
-        if [ -f "pom.xml" ]; then
-          JAVA="pom.xml"
-        elif [ -f "build.gradle" ]; then
-          JAVA="build.gradle"
-        elif [ -f "build.gradle.kts" ]; then
-          JAVA="build.gradle.kts"
-        fi
-
-        if [ -n "$JAVA" ]; then
-          TECHS="java,${TECHS}"
-          COUNT=$((COUNT + 1))
-        fi
-
-        # Ansible Collection detection. `ansible-galaxy collection init` does not emit
-        # a `type:` field, so its presence is the reliable signal; requiring that
-        # literal string missed every collection generated by the current CLI.
+        # Ansible Collection detection (file-based; not mise-managed)
         if [ -f "galaxy.yml" ]; then
           ANSIBLE_COLLECTION="galaxy.yml"
-          TECHS="ansible-collection,${TECHS}"
-          COUNT=$((COUNT + 1))
+          if [[ ! "$TECHS" =~ (^|,)ansible-collection(,|$) ]]; then
+            TECHS="ansible-collection,${TECHS}"
+            COUNT=$((COUNT + 1))
+          fi
         fi
 
-        # Container detection (Dockerfile or Containerfile)
+        # Container detection (Dockerfile or Containerfile; file-based)
         if [ -f "Dockerfile" ]; then
           CONTAINER="Dockerfile"
         elif [ -f "Containerfile" ]; then
@@ -128,11 +175,13 @@ runs:
         fi
 
         if [ -n "$CONTAINER" ]; then
-          TECHS="container,${TECHS}"
-          COUNT=$((COUNT + 1))
+          if [[ ! "$TECHS" =~ (^|,)container(,|$) ]]; then
+            TECHS="container,${TECHS}"
+            COUNT=$((COUNT + 1))
+          fi
         fi
 
-        # Ansible Execution Environment detection
+        # Ansible Execution Environment detection (file-based)
         if [ -f "execution-environment.yml" ]; then
           ANSIBLE_EE="execution-environment.yml"
         elif [ -f "execution-environment.yaml" ]; then
@@ -140,26 +189,23 @@ runs:
         fi
 
         if [ -n "$ANSIBLE_EE" ]; then
-          TECHS="ansible-execution-environment,${TECHS}"
-          COUNT=$((COUNT + 1))
+          if [[ ! "$TECHS" =~ (^|,)ansible-execution-environment(,|$) ]]; then
+            TECHS="ansible-execution-environment,${TECHS}"
+            COUNT=$((COUNT + 1))
+          fi
         fi
 
-        # Helm detection - find Chart.yml anywhere in the repo
-        HELM=$(find . -name "Chart.yml" -type f 2>/dev/null | head -1 | sed 's|^\./||')
+        # Helm detection - find Chart.yaml anywhere in the repo (fixed from Chart.yml)
+        HELM=$(find . -name "Chart.yaml" -type f 2>/dev/null | head -1 | sed 's|^\./||')
 
         if [ -n "$HELM" ]; then
-          TECHS="helm,${TECHS}"
-          COUNT=$((COUNT + 1))
+          if [[ ! "$TECHS" =~ (^|,)helm(,|$) ]]; then
+            TECHS="helm,${TECHS}"
+            COUNT=$((COUNT + 1))
+          fi
         fi
 
-        # Node.js detection
-        if [ -f "package.json" ]; then
-          NODEJS="package.json"
-          TECHS="nodejs,${TECHS}"
-          COUNT=$((COUNT + 1))
-        fi
-
-        # Generic build detection
+        # Generic build detection (file-based)
         if [ -f "Makefile" ]; then
           GENERIC="Makefile"
         elif [ -f "VERSION" ]; then
@@ -169,14 +215,16 @@ runs:
         fi
 
         if [ -n "$GENERIC" ]; then
-          TECHS="generic,${TECHS}"
-          COUNT=$((COUNT + 1))
+          if [[ ! "$TECHS" =~ (^|,)generic(,|$) ]]; then
+            TECHS="generic,${TECHS}"
+            COUNT=$((COUNT + 1))
+          fi
         fi
 
         # Remove trailing comma
         TECHS=$(echo "$TECHS" | sed 's/,$//')
 
-        if [ "$COUNT" -eq 0 ] && [ "${{ inputs.fail-on-missing }}" == "true" ]; then
+        if [ "$COUNT" -eq 0 ] && [ "$FAIL_ON_MISSING" == "true" ]; then
           echo "No technologies detected"
           exit 1
         fi
@@ -218,6 +266,7 @@ runs:
         echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"
         echo "ansible-execution-environment=$ANSIBLE_EE" >> "$GITHUB_OUTPUT"
         echo "helm=$HELM" >> "$GITHUB_OUTPUT"
+        echo "mise=$MISE" >> "$GITHUB_OUTPUT"
 
         # Summary
         echo "Detected $COUNT technology(ies): $TECHS"

@@ -5,6 +5,13 @@ These run the composite action's own bash script against synthetic repositories,
 so the assertions describe what consumers actually observe rather than what the
 script appears to intend.
 
+Since P1 the repository's `mise.toml` is the authority for language/toolchain
+detection: the declared tools are read through `mise ls --json`, and the file
+sniffers for mise-managed languages (python, go, rust, java, nodejs) are gone.
+A manifest alone (`go.mod`, `pyproject.toml`, `package.json`, ...) is
+deliberately NOT a signal any more, which is why those fixtures now declare a
+`mise.toml` and stub the `mise` binary.
+
 The `primary` vocabulary is contractual: `workflows-lib` feeds it straight into
 `run-tests`, which branches on ansible, python, nodejs, go, rust, java, docker
 and generic. A change that silently drops a language from that set makes the
@@ -16,6 +23,8 @@ Exit code 0 when every case matches, 1 otherwise.
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -31,6 +40,8 @@ ACTION = (
     / "action.yml"
 )
 
+MISE_WARNING = "::warning::mise.toml not found — add one to declare the toolchain"
+
 # A galaxy.yml as produced by `ansible-galaxy collection init`: notably no
 # `type:` field, which is why detection must key on the file's presence.
 GALAXY_YML = (
@@ -39,57 +50,197 @@ GALAXY_YML = (
     "dependencies: {}\nrepository: https://example.com\nbuild_ignore: []\n"
 )
 
-# fixture name -> (files to create, expected outputs)
-CASES: dict[str, tuple[dict[str, str], dict[str, str]]] = {
-    "nodejs": ({"package.json": "{}"}, {"primary": "nodejs", "nodejs": "package.json"}),
-    "ansible-collection": (
-        {"galaxy.yml": GALAXY_YML},
-        {"primary": "ansible", "ansible-collection": "galaxy.yml"},
-    ),
-    "python": (
-        {"pyproject.toml": ""},
-        {"primary": "python", "python": "pyproject.toml"},
-    ),
-    "go": ({"go.mod": ""}, {"primary": "go", "go": "go.mod"}),
-    "rust": ({"Cargo.toml": ""}, {"primary": "rust", "rust": "Cargo.toml"}),
-    "java": ({"pom.xml": ""}, {"primary": "java", "java": "pom.xml"}),
-    "docker": ({"Dockerfile": ""}, {"primary": "docker", "container": "Dockerfile"}),
-    "docker-compose": (
-        {"Dockerfile": "", "docker-compose.yml": ""},
-        {"primary": "docker"},
-    ),
-    "helm": ({"Chart.yml": ""}, {"primary": "generic", "helm": "Chart.yml"}),
-    "generic-makefile": (
-        {"Makefile": ""},
-        {"primary": "generic", "generic": "Makefile"},
-    ),
-    "empty": ({}, {"primary": "generic", "count": "0"}),
-    # ansible outranks every other signal, matching the precedence the consumer
-    # previously relied on from its own local detector
-    "ansible-beats-python": (
-        {"galaxy.yml": GALAXY_YML, "pyproject.toml": "", "package.json": "{}"},
-        {"primary": "ansible", "count": "3"},
-    ),
-    "python-beats-nodejs": (
-        {"pyproject.toml": "", "package.json": "{}"},
-        {"primary": "python", "count": "2"},
-    ),
-    "execution-environment": (
-        {"execution-environment.yml": ""},
+MISE_TOML_PYTHON = '[tools]\npython = "3.12"\n'
+
+
+def mise_json(*tools: str) -> str:
+    """Payload in the exact shape `mise ls --json` emits.
+
+    The real command lists every tool mise knows about - including tools that a
+    config file requests but that are not installed - as an object keyed by tool
+    name, each value carrying at least these fields. Replaying that shape keeps
+    the action's parser honest about the real schema.
+    """
+    return json.dumps(
         {
+            tool: {
+                "version": "1.0.0",
+                "requested_version": "1",
+                "installed": True,
+                "active": True,
+            }
+            for tool in tools
+        },
+        indent=2,
+    )
+
+
+# fixture name -> {
+#   files:  files to create in the synthetic repo
+#   mise:   optional `mise ls --json` payload exposed through a stub `mise`
+#   env:    optional environment overrides for the action step
+#   expect: expected GITHUB_OUTPUT key -> value
+#   warns:  optional override for the expected missing-mise.toml warning
+# }
+CASES: dict[str, dict] = {
+    # --- mise-first: the declared toolchain is the authority -------------
+    "mise-python": {
+        "files": {"mise.toml": MISE_TOML_PYTHON},
+        "mise": mise_json("python"),
+        "expect": {
+            "primary": "python",
+            "python": "mise.toml",
+            "mise": "mise.toml",
+            "count": "1",
+        },
+    },
+    # mise shortname `node` must land in the vocabulary as `nodejs`.
+    "mise-node-maps-to-nodejs": {
+        "files": {"mise.toml": '[tools]\nnode = "20"\n'},
+        "mise": mise_json("node"),
+        "expect": {"primary": "nodejs", "nodejs": "mise.toml", "count": "1"},
+    },
+    "mise-go": {
+        "files": {"mise.toml": '[tools]\ngo = "1.22"\n'},
+        "mise": mise_json("go"),
+        "expect": {"primary": "go", "go": "mise.toml", "count": "1"},
+    },
+    "mise-rust": {
+        "files": {"mise.toml": '[tools]\nrust = "stable"\n'},
+        "mise": mise_json("rust"),
+        "expect": {"primary": "rust", "rust": "mise.toml", "count": "1"},
+    },
+    "mise-java": {
+        "files": {"mise.toml": '[tools]\njava = "21"\n'},
+        "mise": mise_json("java"),
+        "expect": {"primary": "java", "java": "mise.toml", "count": "1"},
+    },
+    # A mise-managed tool outside the vocabulary is reported but must never
+    # become `primary` (run-tests has no branch for it).
+    "mise-unsupported-tool-stays-generic": {
+        "files": {"mise.toml": '[tools]\nterraform = "1.9"\n'},
+        "mise": mise_json("terraform"),
+        "expect": {"primary": "generic", "count": "1"},
+    },
+    # --- a manifest alone is no longer a signal --------------------------
+    "go-mod-without-mise-is-generic": {
+        "files": {"go.mod": ""},
+        "expect": {"primary": "generic", "go": "", "count": "0"},
+        "warns": True,
+    },
+    # Removing the python sniffer must not resurrect it from a stray stub.
+    "python-manifest-without-mise-is-generic": {
+        "files": {"pyproject.toml": ""},
+        "expect": {"primary": "generic", "python": "", "count": "0"},
+        "warns": True,
+    },
+    # The stub exists on PATH but there is no mise.toml: a runner's global mise
+    # config must not leak a technology into this repo.
+    "mise-ignored-without-manifest": {
+        "files": {},
+        "mise": mise_json("python"),
+        "expect": {"primary": "generic", "python": "", "count": "0"},
+        "warns": True,
+    },
+    # --- the missing-mise.toml warning -----------------------------------
+    "missing-mise-warns": {
+        "files": {"Makefile": ""},
+        "expect": {"primary": "generic", "generic": "Makefile", "count": "1"},
+        "warns": True,
+    },
+    "missing-mise-warning-can-be-suppressed": {
+        "files": {"Makefile": ""},
+        "env": {"WARN_ON_MISSING_MISE": "false"},
+        "expect": {"primary": "generic", "generic": "Makefile", "count": "1"},
+        "warns": False,
+    },
+    "mise-present-does-not-warn": {
+        "files": {"mise.toml": MISE_TOML_PYTHON},
+        "mise": mise_json("python"),
+        "expect": {"primary": "python", "count": "1"},
+        "warns": False,
+    },
+    # --- file-based technologies that are NOT mise-managed ---------------
+    "ansible-collection": {
+        "files": {"galaxy.yml": GALAXY_YML},
+        "expect": {
+            "primary": "ansible",
+            "ansible-collection": "galaxy.yml",
+            "count": "1",
+        },
+    },
+    "docker-file": {
+        "files": {"Dockerfile": ""},
+        "expect": {"primary": "docker", "container": "Dockerfile", "count": "1"},
+    },
+    "docker-containerfile": {
+        "files": {"Containerfile": ""},
+        "expect": {"primary": "docker", "container": "Containerfile", "count": "1"},
+    },
+    "docker-compose": {
+        "files": {"Dockerfile": "", "docker-compose.yml": ""},
+        "expect": {"primary": "docker", "count": "1"},
+    },
+    # The Helm chart file is Chart.yaml; sniffing Chart.yml detected nothing.
+    "helm-chart": {
+        "files": {"Chart.yaml": ""},
+        "expect": {"primary": "generic", "helm": "Chart.yaml", "count": "1"},
+    },
+    "generic-makefile": {
+        "files": {"Makefile": ""},
+        "expect": {"primary": "generic", "generic": "Makefile", "count": "1"},
+    },
+    "empty": {"files": {}, "expect": {"primary": "generic", "count": "0"}},
+    "execution-environment": {
+        "files": {"execution-environment.yml": ""},
+        "expect": {
             "primary": "generic",
             "ansible-execution-environment": "execution-environment.yml",
+            "count": "1",
         },
-    ),
+    },
+    # --- precedence ------------------------------------------------------
+    # ansible outranks every other signal, matching the precedence the consumer
+    # previously relied on from its own local detector.
+    "ansible-beats-python": {
+        "files": {"galaxy.yml": GALAXY_YML, "mise.toml": MISE_TOML_PYTHON},
+        "mise": mise_json("python"),
+        "expect": {"primary": "ansible", "count": "2"},
+    },
+    "python-beats-nodejs": {
+        "files": {"mise.toml": '[tools]\npython = "3.12"\nnode = "20"\n'},
+        "mise": mise_json("python", "node"),
+        "expect": {"primary": "python", "count": "2"},
+    },
 }
 
 
-def load_script() -> str:
-    step = yaml.safe_load(ACTION.read_text())["runs"]["steps"][0]
-    return step["run"].replace("${{ inputs.fail-on-missing }}", "false")
+def load_step() -> tuple[str, dict[str, str]]:
+    """Return the detection script plus the env the action declares for it.
+
+    The action passes its inputs through `env:` rather than interpolating
+    `${{ inputs.* }}` into the shell, so the suite reproduces the real defaults
+    by resolving each `env:` value against the action's own `inputs:` block.
+    """
+    document = yaml.safe_load(ACTION.read_text())
+    step = document["runs"]["steps"][0]
+    inputs = document.get("inputs") or {}
+    env: dict[str, str] = {}
+    for key, raw in (step.get("env") or {}).items():
+        match = re.fullmatch(r"\$\{\{\s*inputs\.([\w-]+)\s*\}\}", str(raw).strip())
+        if match:
+            env[key] = str(inputs.get(match.group(1), {}).get("default", ""))
+        else:
+            env[key] = str(raw)
+    return step["run"], env
 
 
-def run_against(script: str, files: dict[str, str]) -> dict[str, str]:
+def run_against(
+    script: str,
+    files: dict[str, str],
+    env: dict[str, str],
+    mise_payload: str | None = None,
+) -> tuple[dict[str, str], str, str]:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         for name, content in files.items():
@@ -98,30 +249,46 @@ def run_against(script: str, files: dict[str, str]) -> dict[str, str]:
             target.write_text(content)
         out = root / ".out"
         out.write_text("")
+        run_env = {"PATH": "/usr/bin:/bin", **env, "GITHUB_OUTPUT": str(out)}
+        if mise_payload is not None:
+            # Stub `mise`. The payload is the captured shape of a real
+            # `mise ls --json`, so only the binary is faked, not the schema.
+            bin_dir = root / "bin"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            stub = bin_dir / "mise"
+            stub.write_text(
+                f"#!/bin/bash\ncat <<'MISE_JSON'\n{mise_payload}\nMISE_JSON\n"
+            )
+            stub.chmod(0o755)
+            run_env["PATH"] = f"{bin_dir}:/usr/bin:/bin"
         result = subprocess.run(
             ["bash", "-c", script],
             cwd=root,
-            env={"GITHUB_OUTPUT": str(out), "PATH": "/usr/bin:/bin"},
+            env=run_env,
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             raise RuntimeError(f"script failed: {result.stderr.strip()}")
-        parsed = {}
+        parsed: dict[str, str] = {}
         for line in out.read_text().splitlines():
             if "=" in line:
                 key, _, value = line.partition("=")
                 parsed[key.strip()] = value.strip()
-        return parsed
+        return parsed, result.stdout, result.stderr
 
 
 def main() -> int:
-    script = load_script()
+    script, step_env = load_step()
     failures: list[str] = []
 
-    for name, (files, expected) in CASES.items():
+    for name, case in CASES.items():
+        files = case["files"]
+        expected = case["expect"]
+        expect_warning = case.get("warns", "mise.toml" not in files)
+        env = {**step_env, **case.get("env", {})}
         try:
-            actual = run_against(script, files)
+            actual, stdout, stderr = run_against(script, files, env, case.get("mise"))
         except Exception as exc:  # noqa: BLE001 - report, do not abort the suite
             failures.append(f"{name}: {exc}")
             continue
@@ -129,6 +296,11 @@ def main() -> int:
             got = actual.get(key, "")
             if got != want:
                 failures.append(f"{name}: {key} expected {want!r}, got {got!r}")
+        warned = MISE_WARNING in f"{stdout}{stderr}"
+        if warned != expect_warning:
+            failures.append(
+                f"{name}: mise warning expected {expect_warning}, got {warned}"
+            )
 
     if failures:
         print(f"detection FAILED ({len(failures)} problem(s)):")
