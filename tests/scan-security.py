@@ -35,7 +35,7 @@ SCANNERS = {
 
 REQUIRED_INPUTS = {"path", "severity", "upload-sarif", "github-token", "extra-args"}
 REQUIRED_OUTPUTS = {"sarif-path", "findings"}
-UPLOAD_ACTION = "github/codeql-action/upload-sarif@v3"
+UPLOAD_ACTION = "github/codeql-action/upload-sarif@v4"
 
 
 def load_action(name: str) -> dict:

@@ -194,3 +194,17 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.github/actions/scan-.*/action\.yml|tests/scan-security\.py)$'
+
+      - id: run-tests-junit
+        name: verify run-tests forwards JUnit output through tox so the Gate can publish
+        entry: pytest tests/run-tests-junit.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/run-tests/action\.yml|tests/run-tests-junit\.py)$'
+
+      - id: publish-reports-results
+        name: verify publish-reports skips quietly when no test results exist
+        entry: pytest tests/publish-reports-results.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/publish-reports/action\.yml|tests/publish-reports-results\.py)$'
