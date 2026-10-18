@@ -3,9 +3,11 @@
 
 detect-technology emits `python-matrix` from the tox env list; reusable-ci
 turns it into the unit job's strategy.matrix and passes each version down to
-run-tests. Ansible repos keep working because run-tests installs the
-tox-ansible plugin whenever the resolved conf is a tox-ansible config, not
-only when the technology input resolved to `ansible`.
+run-tests. The integration job expands the same list unless the consumer
+pins `integration-python-matrix`. Ansible repos keep working because
+run-tests installs the tox-ansible plugin whenever the resolved conf is a
+tox-ansible config, not only when the technology input resolved to
+`ansible`.
 """
 
 from __future__ import annotations
@@ -46,6 +48,13 @@ def unit_run_tests_step() -> dict:
         if step.get("uses", "").endswith("/run-tests"):
             return step
     raise AssertionError("unit job must call the run-tests action")
+
+
+def integration_run_tests_step() -> dict:
+    for step in jobs()["integration"]["steps"]:
+        if step.get("uses", "").endswith("/run-tests"):
+            return step
+    raise AssertionError("integration job must call the run-tests action")
 
 
 def install_tox_script() -> str:
@@ -94,6 +103,40 @@ def test_unit_passes_matrix_version_to_run_tests():
     assert version == "${{ matrix.python-version }}", (
         "each matrix leg must test its own Python version, not the workflow "
         f"default; run-tests with.python-version: {version}"
+    )
+
+
+def test_integration_matrix_input_is_opt_in_pin():
+    inputs = yaml.safe_load(CI.read_text())["on"]["workflow_call"]["inputs"]
+    spec = inputs.get("integration-python-matrix")
+    assert spec is not None, (
+        "integration-python-matrix must exist so consumers can pin the "
+        f"integration fan-out; inputs: {sorted(inputs)}"
+    )
+    assert spec.get("default") == "" and spec.get("required") is False, (
+        "the pin must default to empty (meaning: same list as unit) so "
+        f"existing callers keep their fan-out unchanged; spec: {spec}"
+    )
+
+
+def test_integration_matrix_falls_back_to_detect_output():
+    matrix = jobs()["integration"]["strategy"]["matrix"]
+    assert (
+        matrix.get("python-version")
+        == "${{ fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix) }}"
+    ), (
+        "integration must expand the same tox-declared versions as unit "
+        "unless the consumer pins a narrower list; a hard-coded fallback "
+        f"hides cross-interpreter dependency breaks; matrix: {matrix}"
+    )
+
+
+def test_integration_passes_matrix_version_to_run_tests():
+    version = integration_run_tests_step()["with"]["python-version"]
+    assert version == "${{ matrix.python-version }}", (
+        "each integration leg must resolve dependencies under its own "
+        "Python, not the workflow default; "
+        f"run-tests with.python-version: {version}"
     )
 
 
@@ -171,6 +214,9 @@ def test_all():
     test_detect_step_forwards_matrix_inputs()
     test_unit_matrix_derives_from_detect_output()
     test_unit_passes_matrix_version_to_run_tests()
+    test_integration_matrix_input_is_opt_in_pin()
+    test_integration_matrix_falls_back_to_detect_output()
+    test_integration_passes_matrix_version_to_run_tests()
     test_ansible_technology_installs_plugin()
     test_tox_ansible_conf_installs_plugin_for_python()
     test_plain_tox_conf_skips_plugin()

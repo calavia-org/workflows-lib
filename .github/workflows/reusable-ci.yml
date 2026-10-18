@@ -178,6 +178,11 @@ name: CI
         type: string
         required: false
         default: 'tox.ini'
+      integration-python-matrix:
+        description: 'JSON array of Python versions for the integration matrix; defaults to the tox-derived python-matrix'
+        type: string
+        required: false
+        default: ''
       ansible-collection-path:
         description: 'Path to Ansible collection'
         type: string
@@ -629,6 +634,13 @@ jobs:
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
+      # Integration legs fan out over the same tox-declared interpreter matrix
+      # as unit by default: dependency resolution diverges per Python, and a
+      # single interpreter hides that. `integration-python-matrix` lets a
+      # consumer pin or widen the set (e.g. molecule scenarios that only
+      # support one interpreter); empty means "same as unit".
+      matrix:
+        python-version: ${{ fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -641,7 +653,7 @@ jobs:
           run-integration-tests: true
           run-e2e-tests: ${{ inputs.run-e2e-tests }}
           integration-test-command: ${{ inputs.integration-test-command }}
-          python-version: ${{ inputs.python-version }}
+          python-version: ${{ matrix.python-version }}
           node-version: ${{ inputs.node-version }}
           go-version: ${{ inputs.go-version }}
           rust-toolchain: ${{ inputs.rust-toolchain }}
