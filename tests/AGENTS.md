@@ -17,7 +17,7 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 | `gate-truth-table.py` | ci `Gate` check goes red on any red prerequisite |
 | `release-github-floating-tag.py` | Floating `v<major>` tag derives from the created tag; empty tag aborts |
 | `detect-technology.py` | Technology-detection vocabulary (`ansible > python > nodejs` precedence) |
-| `python-matrix-wiring.py` | Unit matrix derives from the tox env list; tox-ansible installs by conf name |
+| `python-matrix-wiring.py` | Unit and integration matrices derive from the tox env list (integration pinnable via `integration-python-matrix`); tox-ansible installs by conf name |
 | `validate-actions.py` | Every composite action's metadata resolves to real steps/outputs |
 | `validate-branch.py` | Branch/target validation accepts allowed patterns and rejects invalid ones |
 | `self-bump-branch-pattern.py` | internal PR caller admits `dependabot/` branches and does not skip their version bump |
