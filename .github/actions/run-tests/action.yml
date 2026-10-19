@@ -192,6 +192,30 @@ runs:
           fi
         fi
 
+    # The tox env dirs (venv + resolved deps + installed package) are the
+    # dominant per-leg cost; restoring them skips venv creation, dependency
+    # resolution and installation. tox re-validates a restored env every run
+    # (it rebuilds and reinstalls the package under test, and recreates the env
+    # when deps change, including requirements files), so a warm hit cannot run
+    # stale project code. The only residual staleness is unpinned deps not being
+    # re-resolved - the same semantics as a local tox, and bounded by GitHub's
+    # 7-day LRU. Escape hatch: set cache-enabled to false.
+    #
+    # Exact key, deliberately NO restore-keys: invalidation must stay
+    # mechanism-independent (the dependency file hashes below) rather than
+    # trusting tox's own change detection to cover every consumer dependency
+    # mechanism. Code-only commits and PRs inheriting main's warm cache still hit.
+    #
+    # python-version and phase (unit|integration) are in the key so matrix legs
+    # never contend on one save, and so unit saving first cannot lock
+    # integration out of caching (it would restore unit-only envs forever).
+    - name: Cache tox environments
+      if: steps.setup.outputs.python-version != '' && inputs.cache-enabled == 'true' && (inputs.run-unit-tests == 'true' || inputs.run-integration-tests == 'true')
+      uses: actions/cache@v6
+      with:
+        path: .tox
+        key: tox-${{ runner.os }}-${{ runner.arch }}-${{ inputs.python-version }}-${{ inputs.run-unit-tests == 'true' && 'unit' || 'integration' }}-${{ hashFiles(inputs.tox-ini, 'pyproject.toml', 'setup.py', 'setup.cfg', 'poetry.lock', 'requirements*.txt', 'constraints*.txt', 'mise.toml') }}
+
     - name: Determine test command
       id: test-cmd
       shell: bash
