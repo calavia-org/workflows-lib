@@ -193,7 +193,7 @@ repos:
         entry: pytest tests/scan-security.py
         language: system
         pass_filenames: false
-        files: '(\.github/actions/scan-.*/action\.yml|tests/scan-security\.py)$'
+        files: '(\.github/actions/scan-.*/action\.yml|\.github/workflows/reusable-ci\.yml|tests/scan-security\.py)$'
 
       - id: run-tests-junit
         name: verify run-tests forwards JUnit output through tox so the Gate can publish

@@ -5,6 +5,10 @@ Each scanner action must expose the same minimal contract (inputs, outputs,
 SARIF upload) and must install/run a specific open-source CLI tool. These
 checks guard against accidentally breaking the security scanning surface when
 refactoring the composite actions.
+
+Also guards the `security` job wiring in reusable-ci.yml: one matrix leg per
+scanner action, with fail-fast disabled so a red scanner cannot cancel its
+siblings' SARIF uploads.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import sys
 from pathlib import Path
 
 import yaml
+
+WF = ".github/workflows/reusable-ci.yml"
 
 SCANNERS = {
     "scan-secrets": {
@@ -32,6 +38,8 @@ SCANNERS = {
         "install_patterns": ("google/osv-scanner",),
     },
 }
+
+LEG_FOR_ACTION = {name: name.removeprefix("scan-") for name in SCANNERS}
 
 REQUIRED_INPUTS = {"path", "severity", "upload-sarif", "github-token", "extra-args"}
 REQUIRED_OUTPUTS = {"sarif-path", "findings"}
@@ -113,10 +121,57 @@ def check_action(name: str, spec: dict) -> list[str]:
     return errors
 
 
+def check_workflow_wiring() -> list[str]:
+    errors: list[str] = []
+    doc = yaml.safe_load(Path(WF).read_text())
+    job = (doc.get("jobs") or {}).get("security")
+    if job is None:
+        return [f"{WF}: missing 'security' job"]
+
+    strategy = job.get("strategy") or {}
+    legs = (strategy.get("matrix") or {}).get("scanner")
+    expected_legs = list(LEG_FOR_ACTION.values())
+    if legs != expected_legs:
+        errors.append(
+            f"security: matrix.scanner == {legs!r}, expected {expected_legs!r}"
+        )
+    if strategy.get("fail-fast") is not False:
+        errors.append(
+            "security: strategy.fail-fast must be false so a red scanner "
+            "cannot cancel its siblings"
+        )
+
+    perms = job.get("permissions") or {}
+    if perms.get("security-events") != "write":
+        errors.append("security: permissions must include security-events: write")
+
+    for action, leg in LEG_FOR_ACTION.items():
+        uses = f"$/.github/actions/{action}"
+        step = next(
+            (s for s in (job.get("steps") or []) if s.get("uses") == uses),
+            None,
+        )
+        if step is None:
+            errors.append(f"security: no step uses {uses}")
+            continue
+        cond = str(step.get("if", ""))
+        if f"matrix.scanner == '{leg}'" not in cond:
+            errors.append(
+                f"security: {action} step if must gate on "
+                f"matrix.scanner == '{leg}': {cond!r}"
+            )
+        if f"inputs.scan-{leg}" not in cond:
+            errors.append(
+                f"security: {action} step if must gate on inputs.scan-{leg}: {cond!r}"
+            )
+    return errors
+
+
 def main() -> int:
     all_errors: list[str] = []
     for name, spec in SCANNERS.items():
         all_errors.extend(check_action(name, spec))
+    all_errors.extend(check_workflow_wiring())
 
     if all_errors:
         print("scanner action invariants FAILED:")

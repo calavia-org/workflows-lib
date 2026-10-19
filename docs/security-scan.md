@@ -5,6 +5,21 @@ open-source SAST, secret, misconfiguration, and dependency-vulnerability
 scanners on every pull request. Findings fail the required `Gate` check, so they
 block the merge.
 
+Each scanner runs as its own parallel job (a matrix leg named
+`Security Scan (secrets)`, `Security Scan (sast)`, etc.) rather than as a
+sequential step in a single job. Two reasons:
+
+- **SARIF isolation.** The `upload-sarif` action scopes uploads by job
+  analysis key. Sequential uploads within one job contend on that key, and
+  the second upload can fail the whole job even when the scan itself found
+  nothing blocking.
+- **Parallelism.** Semgrep alone can take minutes; the legs run
+  concurrently. `fail-fast` is deliberately `false` so a red scanner never
+  cancels its siblings — every report is needed to triage the PR.
+
+Consumers that require only the aggregated `Gate` check are unaffected by
+the per-scanner job names.
+
 ## Scanners
 
 | Scanner | Tool | What it finds |

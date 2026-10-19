@@ -19,6 +19,7 @@ Standalone Python invariant suites — no pytest, no fixtures, no shared helpers
 | `detect-technology.py` | Technology-detection vocabulary (`ansible > python > nodejs` precedence) |
 | `python-matrix-wiring.py` | Unit and integration matrices derive from the tox env list (integration pinnable via `integration-python-matrix`); tox-ansible installs by conf name |
 | `validate-actions.py` | Every composite action's metadata resolves to real steps/outputs |
+| `scan-security.py` | SAST/SCA/secret scanner actions keep their contract; the `security` job fans out one matrix leg per scanner with fail-fast off |
 | `validate-branch.py` | Branch/target validation accepts allowed patterns and rejects invalid ones |
 | `self-bump-branch-pattern.py` | internal PR caller admits `dependabot/` branches and does not skip their version bump |
 | `doc-refs.py` | Every documented `...@<ref>` resolves to a published tag (needs tag history) |
