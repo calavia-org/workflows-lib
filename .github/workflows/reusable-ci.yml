@@ -320,6 +320,14 @@ jobs:
   # Security scans are a standalone quality gate. They run in parallel with the
   # build/test phases and feed into the final report gate. The job needs
   # security-events: write so the scanner actions can upload SARIF results.
+  #
+  # One matrix leg per scanner. Each leg uploads SARIF under its own job name,
+  # so uploads no longer share a single job's code-scanning analysis key —
+  # sequential uploads in one job contend on that key and the second upload
+  # can fail the whole job. Legs also run concurrently instead of serially.
+  # fail-fast is hardcoded false (not the test-lanes input): a red scanner
+  # must not cancel its siblings, because every scanner's report is needed
+  # to triage the PR.
   security:
     name: Security Scan
     needs: detect
@@ -330,13 +338,19 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        scanner: [secrets, sast, misconfig, dependencies]
     steps:
+      # Skipped legs (scanner disabled by input) need no checkout.
       - uses: actions/checkout@v7
+        if: ${{ (matrix.scanner == 'secrets' && inputs.scan-secrets) || (matrix.scanner == 'sast' && inputs.scan-sast) || (matrix.scanner == 'misconfig' && inputs.scan-misconfig) || (matrix.scanner == 'dependencies' && inputs.scan-dependencies) }}
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Scan secrets
-        if: ${{ inputs.scan-secrets }}
+        if: ${{ matrix.scanner == 'secrets' && inputs.scan-secrets }}
         uses: $/.github/actions/scan-secrets
         with:
           path: .
@@ -344,7 +358,7 @@ jobs:
           upload-sarif: ${{ inputs.security-sarif-upload }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
       - name: Scan SAST
-        if: ${{ inputs.scan-sast }}
+        if: ${{ matrix.scanner == 'sast' && inputs.scan-sast }}
         uses: $/.github/actions/scan-sast
         with:
           path: .
@@ -352,7 +366,7 @@ jobs:
           upload-sarif: ${{ inputs.security-sarif-upload }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
       - name: Scan misconfigurations
-        if: ${{ inputs.scan-misconfig }}
+        if: ${{ matrix.scanner == 'misconfig' && inputs.scan-misconfig }}
         uses: $/.github/actions/scan-misconfig
         with:
           path: .
@@ -360,7 +374,7 @@ jobs:
           upload-sarif: ${{ inputs.security-sarif-upload }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
       - name: Scan dependencies
-        if: ${{ inputs.scan-dependencies }}
+        if: ${{ matrix.scanner == 'dependencies' && inputs.scan-dependencies }}
         uses: $/.github/actions/scan-dependencies
         with:
           path: .
