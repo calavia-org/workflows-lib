@@ -9,6 +9,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 | [`reusable-version-bump.yml`](.github/workflows/reusable-version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
 | [`reusable-ci.yml`](.github/workflows/reusable-ci.yml) | Unified CI pipeline (pre-commit, build, tests, security scanning, optional pre-release) with technology auto-detection | Active |
 | [`reusable-release-artifacts.yml`](.github/workflows/reusable-release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
+| [`reusable-auto-merge-dependabot.yml`](.github/workflows/reusable-auto-merge-dependabot.yml) | Auto-merges Dependabot PRs linked to an open security advisory | Active |
 
 ## Technology Support
 
@@ -47,7 +48,6 @@ This repository is designed to grow. Future additions may include:
 
 Reference workflows using the `uses` keyword in your repository:
 
-<!-- doc-ref-test: skip — version-bump.yml is introduced by the rename in this PR; the reference becomes valid once the floating v0 tag is moved to the commit that contains it. -->
 ```yaml
 jobs:
   version-bump:
@@ -66,16 +66,14 @@ jobs:
 
 **Development** (consumer repositories):
 
-<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0
 ```
 
 **Production** (stable releases):
 
-<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
-uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0.0.2
+uses: calavia-org/workflows-lib/.github/workflows/reusable-release-artifacts.yml@v0.24.0
 ```
 
 ## Development

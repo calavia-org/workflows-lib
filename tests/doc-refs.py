@@ -46,6 +46,7 @@ DOCS = (
     "README.md",
     "RELEASE.md",
     "MIGRATION.md",
+    "docs/auto-merge-dependabot.md",
     "docs/release-artifacts.md",
     "docs/version-bump.md",
 )
