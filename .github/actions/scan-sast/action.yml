@@ -22,6 +22,18 @@ inputs:
     description: 'Extra arguments passed to the Semgrep CLI'
     required: false
     default: ''
+  semgrep-version:
+    description: 'Pinned Semgrep version to install (also pins the venv cache key)'
+    required: false
+    default: '1.181.0'
+  diff-scan:
+    description: 'Scan only files changed since baseline-ref (diff-aware). Off by default: a diff scan cannot see pre-existing findings in untouched files.'
+    required: false
+    default: 'false'
+  baseline-ref:
+    description: 'Git ref to diff against when diff-scan is true; the merge-base with this ref is the baseline'
+    required: false
+    default: ''
 
 outputs:
   sarif-path:
@@ -34,19 +46,48 @@ outputs:
 runs:
   using: composite
   steps:
+    # The venv key pins the Semgrep version, so a version bump invalidates the
+    # cache instead of silently serving a stale engine. Restoring the venv saves
+    # the ~19s `python3 -m venv` + `pip install semgrep` on every run. When the
+    # version is left empty (unpinned), the cache is skipped: a constant key
+    # would freeze the first-installed engine forever.
+    - name: Cache Semgrep venv
+      if: ${{ inputs.semgrep-version != '' }}
+      uses: actions/cache@v6
+      with:
+        path: .venv-semgrep
+        key: semgrep-venv-${{ runner.os }}-${{ inputs.semgrep-version }}
+
     - name: Install Semgrep
       shell: bash
       run: |
         set -euo pipefail
+        SEMGREP_VERSION="${{ inputs.semgrep-version }}"
         if command -v semgrep >/dev/null 2>&1; then
           echo "Semgrep already installed: $(semgrep --version)"
           exit 0
         fi
-        echo "Installing Semgrep into a local venv..."
+        if [ -x .venv-semgrep/bin/semgrep ]; then
+          echo "$PWD/.venv-semgrep/bin" >> "$GITHUB_PATH"
+          echo "Restored Semgrep venv: $(.venv-semgrep/bin/semgrep --version)"
+          exit 0
+        fi
+        echo "Installing Semgrep $SEMGREP_VERSION into a local venv..."
         python3 -m venv .venv-semgrep
-        .venv-semgrep/bin/pip install --quiet semgrep
+        .venv-semgrep/bin/pip install --quiet "semgrep==$SEMGREP_VERSION"
         echo "$PWD/.venv-semgrep/bin" >> "$GITHUB_PATH"
-        echo "Installed: $(semgrep --version)"
+        echo "Installed: $(.venv-semgrep/bin/semgrep --version)"
+
+    # Rule packs are fetched fresh every run (~5s). A run-id key saves a new
+    # snapshot each run while restore-keys always pulls the most recent one, so
+    # the cache stays warm without freezing upstream registry rules.
+    - name: Cache Semgrep rule packs
+      uses: actions/cache@v6
+      with:
+        path: .semgrep-cache
+        key: semgrep-rules-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: |
+          semgrep-rules-${{ runner.os }}-
 
     - name: Run Semgrep
       id: scan
@@ -55,6 +96,11 @@ runs:
         SCAN_PATH: ${{ inputs.path }}
         SEVERITY: ${{ inputs.severity }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
+        DIFF_SCAN: ${{ inputs.diff-scan }}
+        BASELINE_REF: ${{ inputs.baseline-ref }}
+        # Cache of downloaded rule packs; rotated by run id so stale registry
+        # rules never persist across runs (a static key would freeze p/ci).
+        SEMGREP_CACHE_DIR: ${{ github.workspace }}/.semgrep-cache
       run: |
         set -euo pipefail
         SARIF="semgrep-results.sarif"
@@ -74,6 +120,22 @@ runs:
             SEVERITY_FLAGS=(--severity ERROR)
             ;;
         esac
+        # Diff-aware scans only see files changed since the baseline; findings
+        # that already exist in untouched files are invisible, so this stays
+        # opt-in rather than the default gate behaviour.
+        if [ "${DIFF_SCAN,,}" == "true" ]; then
+          if [ -z "$BASELINE_REF" ]; then
+            echo "::error::diff-scan is true but baseline-ref is empty"
+            exit 1
+          fi
+          BASELINE="$(git merge-base "$BASELINE_REF" HEAD 2>/dev/null || echo "")"
+          if [ -z "$BASELINE" ]; then
+            echo "::error::could not resolve merge-base with '$BASELINE_REF'; ensure fetch-depth: 0"
+            exit 1
+          fi
+          export SEMGREP_BASELINE_COMMIT="$BASELINE"
+          echo "Diff-aware scan against baseline $BASELINE"
+        fi
         echo "Scanning $SCAN_PATH with Semgrep (severity >= $SEVERITY)..."
         # --error makes Semgrep exit non-zero on findings, blocking the PR.
         read -ra extra_args <<< "$EXTRA_ARGS"

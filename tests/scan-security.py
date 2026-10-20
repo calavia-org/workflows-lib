@@ -23,18 +23,22 @@ WF = ".github/workflows/reusable-ci.yml"
 SCANNERS = {
     "scan-secrets": {
         "tool": "trufflehog",
+        "install_step": "Install TruffleHog",
         "install_patterns": ("trufflesecurity/trufflehog",),
     },
     "scan-sast": {
         "tool": "semgrep",
+        "install_step": "Install Semgrep",
         "install_patterns": ("pip install", "semgrep"),
     },
     "scan-misconfig": {
         "tool": "trivy",
+        "install_step": "Install Trivy",
         "install_patterns": ("aquasecurity/trivy",),
     },
     "scan-dependencies": {
         "tool": "osv-scanner",
+        "install_step": "Install OSV-Scanner",
         "install_patterns": ("google/osv-scanner",),
     },
 }
@@ -95,12 +99,15 @@ def check_action(name: str, spec: dict) -> list[str]:
             f"{name}: output '{output_name}' must derive from steps.scan.outputs"
         )
 
-    install_step = doc.get("runs", {}).get("steps", [{}])[0]
-    run = install_step.get("run", "")
-    if not any(pattern in run for pattern in spec["install_patterns"]):
-        errors.append(
-            f"{name}: install step does not reference expected patterns {spec['install_patterns']}"
-        )
+    install_step = step_named(doc, spec["install_step"])
+    if install_step is None:
+        errors.append(f"{name}: missing install step '{spec['install_step']}'")
+    else:
+        run = install_step.get("run", "")
+        if not any(pattern in run for pattern in spec["install_patterns"]):
+            errors.append(
+                f"{name}: install step does not reference expected patterns {spec['install_patterns']}"
+            )
 
     scan_step = step_with_id(doc, "scan")
     if scan_step is None:
@@ -118,6 +125,77 @@ def check_action(name: str, spec: dict) -> list[str]:
     elif upload_step.get("uses") != UPLOAD_ACTION:
         errors.append(f"{name}: Upload SARIF must use {UPLOAD_ACTION}")
 
+    return errors
+
+
+def check_sast_hardening() -> list[str]:
+    errors: list[str] = []
+    doc = load_action("scan-sast")
+    inputs = doc.get("inputs", {})
+
+    install = step_named(doc, "Install Semgrep")
+    run = install.get("run", "") if install else ""
+    if "semgrep==$SEMGREP_VERSION" not in run and "semgrep==" not in run:
+        errors.append("scan-sast: install no longer pins the Semgrep version")
+    if "${{ inputs.semgrep-version }}" not in run:
+        errors.append("scan-sast: install does not read inputs.semgrep-version")
+
+    cache_uses = [
+        s
+        for s in doc.get("runs", {}).get("steps", [])
+        if "actions/cache" in str(s.get("uses", ""))
+    ]
+    cache_paths = [s.get("with", {}).get("path") for s in cache_uses]
+    if ".venv-semgrep" not in cache_paths:
+        errors.append("scan-sast: no cache of the .venv-semgrep engine venv")
+    if ".semgrep-cache" not in cache_paths:
+        errors.append("scan-sast: no cache of the .semgrep-cache rule packs")
+
+    venv_cache = next(
+        (s for s in cache_uses if s.get("with", {}).get("path") == ".venv-semgrep"),
+        None,
+    )
+    if venv_cache and "inputs.semgrep-version" not in str(
+        venv_cache["with"].get("key", "")
+    ):
+        errors.append(
+            "scan-sast: venv cache key must include the pinned semgrep version"
+        )
+    if venv_cache and "inputs.semgrep-version != ''" not in str(
+        venv_cache.get("if", "")
+    ):
+        errors.append(
+            "scan-sast: venv cache must be skipped when semgrep-version is empty "
+            "(a constant key would freeze the first-installed engine)"
+        )
+
+    rules_cache = next(
+        (s for s in cache_uses if s.get("with", {}).get("path") == ".semgrep-cache"),
+        None,
+    )
+    if rules_cache and "restore-keys" not in rules_cache.get("with", {}):
+        errors.append(
+            "scan-sast: rule cache must use restore-keys so it rotates, not freezes"
+        )
+
+    for input_name in ("diff-scan", "baseline-ref"):
+        if input_name not in inputs:
+            errors.append(f"scan-sast: missing input '{input_name}'")
+    if str(inputs.get("diff-scan", {}).get("default")) != "false":
+        errors.append(
+            "scan-sast: diff-scan must default to false (opt-in, not the gate default)"
+        )
+
+    scan = step_with_id(doc, "scan")
+    scan_run = scan.get("run", "") if scan else ""
+    if "SEMGREP_BASELINE_COMMIT" not in scan_run:
+        errors.append(
+            "scan-sast: scan step does not wire diff mode via SEMGREP_BASELINE_COMMIT"
+        )
+    if "merge-base" not in scan_run:
+        errors.append(
+            "scan-sast: diff mode must derive the baseline from git merge-base"
+        )
     return errors
 
 
@@ -164,6 +242,27 @@ def check_workflow_wiring() -> list[str]:
             errors.append(
                 f"security: {action} step if must gate on inputs.scan-{leg}: {cond!r}"
             )
+    sast_step = next(
+        (
+            s
+            for s in (job.get("steps") or [])
+            if s.get("uses") == "$/.github/actions/scan-sast"
+        ),
+        None,
+    )
+    if sast_step is not None:
+        with_block = sast_step.get("with", {})
+        if "inputs.security-sast-diff-scan" not in str(with_block.get("diff-scan", "")):
+            errors.append(
+                "security: SAST step must forward inputs.security-sast-diff-scan"
+            )
+        if (
+            str(with_block.get("baseline-ref", ""))
+            != "${{ github.event.pull_request.base.sha }}"
+        ):
+            errors.append(
+                "security: SAST step baseline-ref must be github.event.pull_request.base.sha"
+            )
     return errors
 
 
@@ -171,6 +270,7 @@ def main() -> int:
     all_errors: list[str] = []
     for name, spec in SCANNERS.items():
         all_errors.extend(check_action(name, spec))
+    all_errors.extend(check_sast_hardening())
     all_errors.extend(check_workflow_wiring())
 
     if all_errors:
