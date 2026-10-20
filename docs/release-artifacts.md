@@ -52,7 +52,6 @@ For Ansible collections, the workflow supports two artifact types:
 
 #### Required Inputs
 
-<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
@@ -169,7 +168,6 @@ On failure, the workflow can:
 
 ### Ansible Collection + EE
 
-<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
@@ -190,7 +188,6 @@ jobs:
 
 ### Java Application
 
-<!-- doc-ref-test: skip — release-artifacts.yml moved to reusable/ in this PR; the reference becomes valid once the release tags are moved to the commit that contains the new path. -->
 ```yaml
 jobs:
   release:
