@@ -55,6 +55,19 @@ runs:
       if: steps.detect-config.outputs.config_found == 'true'
       uses: jdx/mise-action@v5
 
+    # pre-commit builds a fresh environment for every managed hook (actionlint
+    # = Go, markdownlint = Node, the rest = Python) on each run; restoring this
+    # directory skips those builds. The key hashes the config file, so a hook rev
+    # change rebusts; pre-commit itself rebuilds any env whose repo/rev is absent
+    # from the cache, so a stale restore degrades to a partial rebuild rather
+    # than a wrong result. Local `language: system` hooks use no env here.
+    - name: Cache pre-commit environments
+      if: steps.detect-config.outputs.config_found == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', '.pre-commit-config.yml', inputs.custom-config) }}
+
     - name: Install pre-commit and test dependencies
       if: steps.detect-config.outputs.config_found == 'true'
       shell: bash

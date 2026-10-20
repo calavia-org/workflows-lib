@@ -85,11 +85,27 @@ def test_action_guards_editable_install():
     print("run-pre-commit OK: editable install is guarded by packaging-file presence")
 
 
+def test_action_caches_precommit_environments():
+    steps = action_steps()
+    cache_steps = [s for s in steps if "actions/cache" in str(s.get("uses", ""))]
+    assert cache_steps, "action no longer caches pre-commit hook environments"
+    with_block = cache_steps[0]["with"]
+    assert with_block["path"] == "~/.cache/pre-commit", (
+        "pre-commit env cache path must be ~/.cache/pre-commit"
+    )
+    key = with_block["key"]
+    assert "hashFiles('.pre-commit-config.yaml'" in key, (
+        "pre-commit env cache key must hash the config file so hook rev changes rebust"
+    )
+    print("run-pre-commit OK: caches pre-commit hook environments keyed on config")
+
+
 def test_all():
     test_mise_python_version()
     test_action_uses_mise()
     test_action_runs_precommit_all_files()
     test_action_guards_editable_install()
+    test_action_caches_precommit_environments()
     print("\nrun-pre-commit OK")
 
 
