@@ -448,6 +448,7 @@ jobs:
           run-unit-tests: false
           run-integration-tests: false
           run-e2e-tests: false
+          cache-enabled: ${{ inputs.cache-enabled }}
       - name: Run build
         shell: bash
         run: |

@@ -209,6 +209,13 @@ repos:
         pass_filenames: false
         files: '(\.github/workflows/reusable-ci\.yml|\.github/actions/run-tests/action\.yml|tests/python-matrix-wiring\.py)$'
 
+      - id: run-tests-cache
+        name: verify the tox env cache keeps its exact dependency-hash key and honors the single toggle
+        entry: pytest tests/run-tests-cache.py
+        language: system
+        pass_filenames: false
+        files: '(\.github/actions/run-tests/action\.yml|\.github/workflows/reusable-ci\.yml|tests/run-tests-cache\.py)$'
+
       - id: publish-reports-results
         name: verify publish-reports skips quietly when no test results exist
         entry: pytest tests/publish-reports-results.py
