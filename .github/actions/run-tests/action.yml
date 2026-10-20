@@ -145,6 +145,19 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         cache: ${{ inputs.cache-enabled == 'true' && 'pip' || 'none' }}
+        # setup-python hashes the repo's default dependency files for its pip
+        # cache; a tox-only consumer has none of them, so its cache never
+        # matches. Point the hash at the tox conf and the usual lock/dep files
+        # so every consumer gets a warm pip cache.
+        cache-dependency-path: |
+          ${{ inputs.tox-ini }}
+          pyproject.toml
+          setup.py
+          setup.cfg
+          poetry.lock
+          requirements*.txt
+          constraints*.txt
+          mise.toml
 
     - name: Setup Node.js
       if: steps.setup.outputs.node-version != ''

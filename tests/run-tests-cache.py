@@ -102,6 +102,28 @@ def test_cache_step_uses_pinned_actions_cache():
     )
 
 
+def setup_python_step() -> dict:
+    data = yaml.safe_load(ACTION.read_text())
+    for step in data["runs"]["steps"]:
+        if step.get("name") == "Setup Python":
+            return step
+    raise AssertionError("run-tests is missing its 'Setup Python' step")
+
+
+def test_setup_python_pip_cache_hashes_tox_and_lock_files():
+    path = setup_python_step()["with"]["cache-dependency-path"]
+    assert "${{ inputs.tox-ini }}" in path, (
+        "setup-python must hash the tox conf, otherwise a tox-only consumer "
+        f"has no matching dependency file and gets no pip cache; path: {path!r}"
+    )
+    for name in ("pyproject.toml", "poetry.lock", "requirements*.txt"):
+        assert name in path, (
+            "the pip cache key must cover the usual lock/dep files so a warm "
+            f"cache is restored on dependency-stable runs; missing {name!r}; "
+            f"path: {path!r}"
+        )
+
+
 def test_every_run_tests_call_site_passes_cache_enabled():
     sites = run_tests_call_sites()
     assert sites, "reusable-ci must call run-tests from at least one job"
@@ -119,6 +141,7 @@ def test_all():
     test_cache_key_pins_every_invalidation_component()
     test_cache_step_has_no_restore_keys()
     test_cache_step_uses_pinned_actions_cache()
+    test_setup_python_pip_cache_hashes_tox_and_lock_files()
     test_every_run_tests_call_site_passes_cache_enabled()
     print("\nrun-tests-cache OK")
 
