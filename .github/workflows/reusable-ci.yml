@@ -253,6 +253,11 @@ name: CI
         type: boolean
         required: false
         default: true
+      security-sast-diff-scan:
+        description: 'Scan only files changed in the PR (diff-aware SAST). Off by default: a diff scan cannot report pre-existing findings in untouched files, so keep a full scan elsewhere for the Security tab.'
+        type: boolean
+        required: false
+        default: false
 
     secrets:
       github-token:
@@ -364,6 +369,8 @@ jobs:
           path: .
           severity: ${{ inputs.security-severity }}
           upload-sarif: ${{ inputs.security-sarif-upload }}
+          diff-scan: ${{ inputs.security-sast-diff-scan }}
+          baseline-ref: ${{ github.event.pull_request.base.sha }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
       - name: Scan misconfigurations
         if: ${{ matrix.scanner == 'misconfig' && inputs.scan-misconfig }}
