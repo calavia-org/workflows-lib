@@ -1,0 +1,118 @@
+name: Security Scan
+
+'on':
+  workflow_call:
+    inputs:
+      runner-label:
+        description: 'Runner label'
+        type: string
+        required: false
+        default: 'ubuntu-latest'
+      timeout-minutes:
+        description: 'Job timeout'
+        type: number
+        required: false
+        default: 30
+      scan-secrets:
+        description: 'Run secret scanning with TruffleHog'
+        type: boolean
+        required: false
+        default: true
+      scan-sast:
+        description: 'Run static analysis with Semgrep'
+        type: boolean
+        required: false
+        default: true
+      scan-misconfig:
+        description: 'Run misconfiguration scanning with Trivy'
+        type: boolean
+        required: false
+        default: true
+      scan-dependencies:
+        description: 'Run dependency vulnerability scanning with OSV-Scanner'
+        type: boolean
+        required: false
+        default: true
+      security-severity:
+        description: 'Minimum severity that causes the job to fail (HIGH, MEDIUM, LOW)'
+        type: string
+        required: false
+        default: 'HIGH'
+      security-sarif-upload:
+        description: 'Upload SARIF reports to the GitHub Security tab'
+        type: boolean
+        required: false
+        default: true
+      security-dependencies-extra-args:
+        description: 'Extra arguments appended to the OSV-Scanner CLI (for example --no-resolve or --experimental-exclude=...)'
+        type: string
+        required: false
+        default: ''
+
+    secrets:
+      github-token:
+        description: 'GitHub token'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  # This job is the full-scan counterpart to the `security` job in
+  # reusable-ci.yml, for schedule and workflow_dispatch callers. It has no
+  # `detect` dependency because there is no technology decision to feed it, and
+  # no pull-request expressions because `github.event.pull_request` is empty
+  # outside a PR event. SAST therefore always runs in full-scan mode; the
+  # diff-aware inputs stay in reusable-ci.yml where a PR baseline exists.
+  security:
+    name: Security Scan
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        scanner: [secrets, sast, misconfig, dependencies]
+    steps:
+      # Skipped legs (scanner disabled by input) need no checkout.
+      - uses: actions/checkout@v7
+        if: ${{ (matrix.scanner == 'secrets' && inputs.scan-secrets) || (matrix.scanner == 'sast' && inputs.scan-sast) || (matrix.scanner == 'misconfig' && inputs.scan-misconfig) || (matrix.scanner == 'dependencies' && inputs.scan-dependencies) }}
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan secrets
+        if: ${{ matrix.scanner == 'secrets' && inputs.scan-secrets }}
+        uses: $/.github/actions/scan-secrets
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan SAST
+        if: ${{ matrix.scanner == 'sast' && inputs.scan-sast }}
+        uses: $/.github/actions/scan-sast
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan misconfigurations
+        if: ${{ matrix.scanner == 'misconfig' && inputs.scan-misconfig }}
+        uses: $/.github/actions/scan-misconfig
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+      - name: Scan dependencies
+        if: ${{ matrix.scanner == 'dependencies' && inputs.scan-dependencies }}
+        uses: $/.github/actions/scan-dependencies
+        with:
+          path: .
+          severity: ${{ inputs.security-severity }}
+          upload-sarif: ${{ inputs.security-sarif-upload }}
+          extra-args: ${{ inputs.security-dependencies-extra-args }}
+          github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}

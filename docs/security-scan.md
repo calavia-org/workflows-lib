@@ -47,6 +47,20 @@ All inputs live on `ci.yml`:
 | `scan-dependencies` | boolean | `true` | Run OSV-Scanner dependency scanning. |
 | `security-severity` | string | `HIGH` | Minimum severity that causes a failure (`HIGH`, `MEDIUM`, `LOW`). |
 | `security-sarif-upload` | boolean | `true` | Upload SARIF reports to the GitHub Security tab. |
+| `security-dependency-review` | boolean | `true` | Run the pull-request-only `Dependency Review` job against the GitHub dependency graph. |
+| `security-dependencies-extra-args` | string | `''` | Extra arguments appended to the OSV-Scanner CLI (for example `--no-resolve` or an `--experimental-exclude` pattern). |
+
+## Dependency Review gate
+
+`reusable-ci.yml` also runs a `Dependency Review` job on pull requests. It reads
+the GitHub dependency graph and reports only the vulnerable dependencies a PR
+introduces, so it is fast enough to run on every PR. It complements the full
+OSV-Scanner scan, which resolves the entire manifest set and is the slow path.
+
+Coverage follows the dependency graph: ecosystems or manifests that are not in
+the graph are not reviewed. Set `security-dependency-review: false` to disable
+the job. Use `security-dependencies-extra-args` to tune the OSV-Scanner leg, for
+example `--no-resolve` to skip transitive dependency resolution.
 
 ## Permissions
 
@@ -96,3 +110,11 @@ report to the GitHub Security tab with a distinct category:
 - `osv-scanner-dependencies`
 
 Findings appear under the repository's **Security → Code scanning alerts** tab.
+
+## Scheduled full scans
+
+`reusable-ci.yml` is designed as a pull-request gate. For periodic full scans of
+a branch, call `reusable-security-scan.yml` from a `schedule` or
+`workflow_dispatch` workflow instead. It runs the same four scanners without
+technology detection or pull-request-only inputs, so it works outside a pull
+request. See the README for a usage example.

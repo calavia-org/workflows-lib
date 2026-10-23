@@ -8,6 +8,7 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 |----------|---------|--------|
 | [`reusable-version-bump.yml`](.github/workflows/reusable-version-bump.yml) | Validates conventional commits and auto-bumps versions | Active |
 | [`reusable-ci.yml`](.github/workflows/reusable-ci.yml) | Unified CI pipeline (pre-commit, build, tests, security scanning, optional pre-release) with technology auto-detection | Active |
+| [`reusable-security-scan.yml`](.github/workflows/reusable-security-scan.yml) | Security-only full scans (secrets, SAST, misconfig, dependencies) for schedules and manual dispatch | Active |
 | [`reusable-release-artifacts.yml`](.github/workflows/reusable-release-artifacts.yml) | Release artifacts (binary, docker, helm) with multi-target publishing | Active |
 | [`reusable-auto-merge-dependabot.yml`](.github/workflows/reusable-auto-merge-dependabot.yml) | Auto-merges Dependabot PRs linked to an open security advisory | Active |
 
@@ -20,6 +21,32 @@ Reusable GitHub Actions workflows for the `calavia-org` organization.
 - **Security**: Secret scanning (TruffleHog), SAST (Semgrep), misconfiguration scanning (Trivy), dependency CVE scanning (OSV-Scanner)
 - **Reports**: Test results, coverage, SARIF uploads, PR comments
 - **Docs**: See [`docs/security-scan.md`](docs/security-scan.md)
+
+### `reusable-security-scan.yml`
+
+Security-only full scans for `schedule` and `workflow_dispatch` callers. It
+runs the same secret, SAST, misconfiguration, and dependency scanners as
+`reusable-ci.yml`, but without technology detection or pull-request-only inputs,
+so it works on any branch and any event.
+
+Use it for periodic whole-repository scans. Do not use it as a PR gate: pull
+requests should stay on `reusable-ci.yml`, whose fast `Dependency Review` job
+checks only the dependencies a PR introduces.
+
+The workflow is new and does not exist at any published tag yet. It becomes
+usable after the next release publishes it:
+
+<!-- doc-ref-test: skip -->
+```yaml
+jobs:
+  security:
+    uses: calavia-org/workflows-lib/.github/workflows/reusable-security-scan.yml@v0
+    permissions:
+      contents: read
+      security-events: write
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+```
 
 ### `reusable-release-artifacts.yml`
 

@@ -59,7 +59,7 @@ def topo(jobs):
     return order
 
 
-def eval_if(cond, results, inputs, base_ref):
+def eval_if(cond, results, inputs, base_ref, event_name):
     if not cond:
         return True
     e = re.sub(r"\$\{\{(.*?)\}\}", r"\1", cond, flags=re.S).strip()
@@ -72,6 +72,9 @@ def eval_if(cond, results, inputs, base_ref):
     )
     e = e.replace("always()", "True")
     e = re.sub(r"github\.base_ref", repr(base_ref), e)
+    # Dependency Review is PR-only, so its `if` reads the event name. These
+    # scenarios model a PR check by default; a non-PR run must skip that job.
+    e = re.sub(r"github\.event_name", repr(event_name), e)
     e = re.sub(r"startsWith\(([^,]+),\s*'([^']*)'\)", r"\1.startswith('\2')", e)
     try:
         return bool(eval(e, {"__builtins__": {}}, {}))
@@ -114,6 +117,7 @@ def run(
     prerelease=False,
     script=None,
     env_exprs=None,
+    event_name="pull_request",
 ):
     results = {}
     for name in topo(jobs):
@@ -128,7 +132,7 @@ def run(
         if blocked and not has_status_fn(cond):
             results[name] = "skipped"
             continue
-        if not eval_if(cond, results, inputs, base_ref):
+        if not eval_if(cond, results, inputs, base_ref, event_name):
             results[name] = "skipped"
             continue
         results[name] = "failure" if name in fail_jobs else "success"
@@ -148,7 +152,16 @@ def main():
         "package": ["detect", "build"],
         "integration": ["detect", "package"],
         "security": ["detect"],
-        "report": ["unit", "integration", "build", "package", "pre-commit", "security"],
+        "dependency-review": [],
+        "report": [
+            "unit",
+            "integration",
+            "build",
+            "package",
+            "pre-commit",
+            "security",
+            "dependency-review",
+        ],
         "pre-release": ["report"],
     }
     for job, deps in expected.items():
@@ -169,6 +182,7 @@ def main():
         "PACKAGE_RESULT",
         "PRE_COMMIT_RESULT",
         "SECURITY_RESULT",
+        "DEPENDENCY_REVIEW_RESULT",
     ):
         if token not in script:
             print(f"FAIL: gate script never reads {token}")
@@ -204,7 +218,15 @@ def main():
             print("        " + out.replace("\n", "\n        "))
 
     print("a red prerequisite must turn the gate red:")
-    for job in ("unit", "integration", "build", "package", "pre-commit", "security"):
+    for job in (
+        "unit",
+        "integration",
+        "build",
+        "package",
+        "pre-commit",
+        "security",
+        "dependency-review",
+    ):
         scenario(f"{job} fails", {job}, expect_pass=False, **{"run-package": True})
 
     # The `expected` drift check above already guards the `needs` edge. This
@@ -276,6 +298,11 @@ def main():
         ("build disabled", "build", {"run_build": False}),
         ("package disabled", "package", {"run_package": False}),
         ("security disabled", "security", {"run_security_scans": False}),
+        (
+            "dependency review disabled",
+            "dependency-review",
+            {"security_dependency_review": False},
+        ),
     ):
         r = run(jobs, dict(defaults, **over), set(), script=script, env_exprs=env_exprs)
         passed, out = run_gate(script, r, env_exprs)
