@@ -258,6 +258,16 @@ name: CI
         type: boolean
         required: false
         default: false
+      security-dependency-review:
+        description: 'Run the pull-request-only Dependency Review gate using the GitHub dependency graph'
+        type: boolean
+        required: false
+        default: true
+      security-dependencies-extra-args:
+        description: 'Extra arguments appended to the OSV-Scanner CLI (for example --no-resolve or --experimental-exclude=...)'
+        type: string
+        required: false
+        default: ''
 
     secrets:
       github-token:
@@ -387,7 +397,29 @@ jobs:
           path: .
           severity: ${{ inputs.security-severity }}
           upload-sarif: ${{ inputs.security-sarif-upload }}
+          extra-args: ${{ inputs.security-dependencies-extra-args }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
+
+  # Dependency Review is a pull-request gate, not a scanner: it reads the GitHub
+  # dependency graph and reports only the vulnerabilities a PR introduces, which
+  # is fast enough to run on every PR. It complements the full OSV-Scanner leg,
+  # which resolves every manifest in the repository and is the slow path.
+  dependency-review:
+    name: Dependency Review
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 10
+    if: ${{ github.event_name == 'pull_request' && inputs.security-dependency-review }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: ${{ inputs.security-severity == 'HIGH' && 'high' || inputs.security-severity == 'MEDIUM' && 'moderate' || 'low' }}
+          comment-summary-in-pr: ${{ inputs.comment-on-pr }}
 
   # Unit tests are the mandatory gate for the code under test. Always runs, so a
   # skipped unit job still reports instead of vanishing.
@@ -786,7 +818,7 @@ jobs:
     # `pre-commit` is listed even though no other job depends on it, so that its
     # result is asserted directly rather than being enforced by accident through
     # `unit` skipping.
-    needs: [unit, integration, build, package, pre-commit, security]
+    needs: [unit, integration, build, package, pre-commit, security, dependency-review]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
     if: ${{ always() }}
@@ -827,12 +859,14 @@ jobs:
           PACKAGE_RESULT: ${{ needs.package.result }}
           PRE_COMMIT_RESULT: ${{ needs.pre-commit.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
         run: |
           echo "Unit: $UNIT_RESULT"
           echo "Integration: $INTEGRATION_RESULT"
           echo "Build: $BUILD_RESULT"
           echo "Package: $PACKAGE_RESULT"
           echo "Pre-Commit: $PRE_COMMIT_RESULT"
+          echo "Dependency Review: $DEPENDENCY_REVIEW_RESULT"
           FAILED=0
           if [ "$UNIT_RESULT" != "success" ]; then
             echo "❌ Unit tests did not pass (result: $UNIT_RESULT)."
@@ -871,6 +905,13 @@ jobs:
           # required `Gate` check go green while SAST/secret findings exist.
           if [ "$SECURITY_RESULT" != "success" ] && [ "$SECURITY_RESULT" != "skipped" ]; then
             echo "❌ Security scans did not pass (result: $SECURITY_RESULT)."
+            FAILED=1
+          fi
+          # Dependency Review only runs on pull requests, and the input can turn
+          # it off, so `skipped` is legitimate. A run that started and did not
+          # pass is not.
+          if [ "$DEPENDENCY_REVIEW_RESULT" != "success" ] && [ "$DEPENDENCY_REVIEW_RESULT" != "skipped" ]; then
+            echo "❌ Dependency review did not pass (result: $DEPENDENCY_REVIEW_RESULT)."
             FAILED=1
           fi
           if [ "$FAILED" -ne 0 ]; then

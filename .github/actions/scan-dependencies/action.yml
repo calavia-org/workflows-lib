@@ -22,6 +22,14 @@ inputs:
     description: 'Extra arguments passed to the OSV-Scanner CLI'
     required: false
     default: ''
+  offline-vulnerabilities:
+    description: 'Use a cached local OSV database for vulnerability matching instead of querying the OSV API per package'
+    required: false
+    default: 'true'
+  db-cache-dir:
+    description: 'Directory used by OSV-Scanner for the local vulnerability database cache'
+    required: false
+    default: '~/.cache/osv-scanner'
 
 outputs:
   sarif-path:
@@ -54,23 +62,63 @@ runs:
         chmod +x /usr/local/bin/osv-scanner
         echo "Installed: $(osv-scanner --version)"
 
+    # The database is keyed by ISO week rather than by run: OSV publishes new
+    # advisories continuously, but a per-run key would force a full database
+    # download on every scan. A cache hit reuses the week's snapshot and the scan
+    # step only requests a download on a miss.
+    - name: Resolve OSV database cache key
+      id: db-key
+      shell: bash
+      run: |
+        set -euo pipefail
+        week=$(date -u +%Y-%W)
+        echo "week=$week" >> "$GITHUB_OUTPUT"
+
+    - name: Cache OSV database
+      id: db-cache
+      if: ${{ inputs.offline-vulnerabilities == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.db-cache-dir }}
+        key: osv-db-${{ runner.os }}-${{ steps.db-key.outputs.week }}
+
     - name: Scan dependencies
       id: scan
       shell: bash
       env:
         SCAN_PATH: ${{ inputs.path }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
+        OFFLINE_VULNERABILITIES: ${{ inputs.offline-vulnerabilities }}
+        DB_CACHE_DIR: ${{ inputs.db-cache-dir }}
+        DB_CACHE_HIT: ${{ steps.db-cache.outputs.cache-hit }}
       run: |
         set -euo pipefail
         SARIF="osv-scanner-results.sarif"
         echo "Scanning $SCAN_PATH for vulnerable dependencies..."
         # OSV-Scanner exits non-zero when vulnerabilities are found, so we continue
         # to capture the SARIF file and then decide whether to fail the step.
+        OSV_ARGS=()
+        DB_DOWNLOADED="false"
+        if [ "$OFFLINE_VULNERABILITIES" = "true" ]; then
+          # The input is literal text, so the shell will not expand a leading ~.
+          DB_DIR="${DB_CACHE_DIR/#\~/${HOME}}"
+          export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$DB_DIR"
+          OSV_ARGS+=(--offline-vulnerabilities)
+          # A cache hit already holds this week's database. Only a miss downloads,
+          # because --offline-vulnerabilities alone matches from the local copy;
+          # without it the scanner queries the OSV API per package.
+          if [ "$DB_CACHE_HIT" != "true" ]; then
+            OSV_ARGS+=(--download-offline-databases)
+            DB_DOWNLOADED="true"
+          fi
+        fi
+        echo "Offline vulnerability matching: $OFFLINE_VULNERABILITIES (database downloaded this run: $DB_DOWNLOADED)"
         read -ra extra_args <<< "$EXTRA_ARGS"
         osv-scanner \
           --format sarif \
           --output-file "$SARIF" \
           --recursive \
+          "${OSV_ARGS[@]}" \
           "${extra_args[@]}" \
           "$SCAN_PATH" || true
         if [ ! -f "$SARIF" ]; then
