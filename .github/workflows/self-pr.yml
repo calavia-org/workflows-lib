@@ -34,6 +34,8 @@ jobs:
       fail-on-invalid-branch: true
       require-conventional-commits: true
       no-bump-branch-pattern: "^(chore|docs|ci|test|refactor|perf|style)/.+"
+      enforce-no-bump-scope: true
+      fail-on-invalid-scope: true
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,6 +48,10 @@ jobs:
       security-events: write
       actions: read
     uses: $/.github/workflows/reusable-ci.yml
+    with:
+      enforce-no-bump-scope: true
+      fail-on-invalid-scope: true
+      plan-strict-nobump: true
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 

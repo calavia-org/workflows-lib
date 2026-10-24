@@ -4,7 +4,8 @@ branding:
   color: blue
 description: |
   Validates a PR branch name and target branch against allowed patterns, and
-  decides whether the branch should trigger a version bump.
+  decides whether the branch should trigger a version bump. Optionally enforces
+  that no-bump branches only touch docs/CI/config files.
 inputs:
   branch:
     description: 'PR branch name to validate (e.g. github.head_ref)'
@@ -24,19 +25,84 @@ inputs:
     description: 'Regex pattern for branches that should skip version bump; empty means no skip'
     required: false
     default: ''
+  base-sha:
+    description: 'Base SHA to diff against'
+    required: false
+    default: ''
+  head-sha:
+    description: 'Head SHA'
+    required: false
+    default: ''
+  base-ref:
+    description: 'Base branch name for diff fallback'
+    required: false
+    default: ''
+  fetch-depth:
+    description: 'Fetch depth before diffing'
+    required: false
+    default: '0'
+  enforce-no-bump-scope:
+    description: 'If true, branches matching no-bump-branch-pattern may only touch allowed paths'
+    required: false
+    default: 'false'
+  fail-on-invalid-scope:
+    description: 'Fail the step if a no-bump branch touches code files outside allowed paths'
+    required: false
+    default: 'false'
+  code-paths-regex:
+    description: 'Regex of code paths from detect-technology (optional)'
+    required: false
+    default: ''
+  no-bump-allowed-paths:
+    description: 'Regex for paths allowed on no-bump branches'
+    required: false
+    default: |
+      ^\.github/workflows/.*
+      ^\.github/actions/.*
+      ^\.pre-commit-config\.yaml$
+      ^\.yamllint.*$
+      ^\.markdownlint.*$
+      ^docs?/.*
+      ^README\.md$
+      ^CONTRIBUTING\.md$
+      ^CHANGELOG\.md$
+      ^LICENSE.*$
+      ^.*\.md$
+      ^\.gitignore$
+      ^\.gitattributes$
 outputs:
   branch-valid:
-    description: 'true if the branch name is valid or validation is disabled'
-    value: ${{ steps.validate-branch.outputs.valid }}
+    description: 'true if the branch name is valid or validation is disabled and scope is valid'
+    value: ${{ steps.decide.outputs.branch_valid }}
   target-valid:
     description: 'true if the target branch is allowed'
     value: ${{ steps.validate-target.outputs.valid }}
   should-bump:
     description: 'true if the branch does not match the no-bump pattern'
     value: ${{ steps.check-no-bump.outputs.should_bump }}
+  scope-valid:
+    description: 'true if a no-bump branch only touches allowed paths'
+    value: ${{ steps.scope.outputs.scope_valid }}
+  code-files-changed:
+    description: 'true if code files were modified outside allowed paths'
+    value: ${{ steps.scope.outputs.code_files_changed }}
+  only-docs-changed:
+    description: 'true if only allowed (docs/ci) files were changed'
+    value: ${{ steps.scope.outputs.only_docs_changed }}
+  changed-files:
+    description: 'Newline separated list of changed files'
+    value: ${{ steps.scope.outputs.changed_files }}
 runs:
   using: composite
   steps:
+    - name: Checkout for diff
+      if: ${{ inputs.enforce-no-bump-scope == 'true' }}
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: ${{ inputs.fetch-depth }}
+        ref: ${{ inputs.head-sha != '' && inputs.head-sha || github.head_ref || github.sha }}
+        persist-credentials: false
+
     - name: Check no-bump branch pattern
       id: check-no-bump
       shell: bash
@@ -49,7 +115,6 @@ runs:
           echo "No no-bump pattern set, allowing bump"
           exit 0
         fi
-
         if echo "$BRANCH" | grep -qE "$PATTERN"; then
           echo "should_bump=false" >> "$GITHUB_OUTPUT"
           echo "⏭️ Branch '$BRANCH' matches no-bump pattern, skipping version bump"
@@ -71,7 +136,6 @@ runs:
           echo "Branch name validation disabled"
           exit 0
         fi
-
         if echo "$BRANCH" | grep -qE "$PATTERN"; then
           echo "valid=true" >> "$GITHUB_OUTPUT"
           echo "✅ Branch name '$BRANCH' matches allowed pattern"
@@ -95,9 +159,7 @@ runs:
         TARGET: ${{ inputs.target-branch }}
         ALLOWED: ${{ inputs.allowed-target-branches }}
       run: |
-        # Convert comma-separated list to regex pattern
         PATTERN=$(echo "$ALLOWED" | sed 's/,/|/g' | sed 's/\*/.*/g')
-
         if echo "$TARGET" | grep -qE "^($PATTERN)$"; then
           echo "valid=true" >> "$GITHUB_OUTPUT"
           echo "✅ Target branch '$TARGET' is allowed"
@@ -105,3 +167,120 @@ runs:
           echo "valid=false" >> "$GITHUB_OUTPUT"
           echo "❌ Target branch '$TARGET' is NOT in allowed list: $ALLOWED"
         fi
+
+    - name: Classify changed files for no-bump scope
+      id: scope
+      if: ${{ inputs.enforce-no-bump-scope == 'true' }}
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.branch }}
+        NO_BUMP_PATTERN: ${{ inputs.no-bump-branch-pattern }}
+        BASE_SHA_IN: ${{ inputs.base-sha }}
+        HEAD_SHA_IN: ${{ inputs.head-sha }}
+        BASE_REF_IN: ${{ inputs.base-ref }}
+        CODE_PATHS_REGEX_IN: ${{ inputs.code-paths-regex }}
+        NO_BUMP_ALLOWED_PATHS_IN: ${{ inputs.no-bump-allowed-paths }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        FAIL_ON_INVALID_SCOPE: ${{ inputs.fail-on-invalid-scope }}
+        TEST_GIT_DIFF: ${{ env.TEST_GIT_DIFF }}
+      run: |
+        set +e
+        IS_NOBUMP="false"
+        if [ -n "$NO_BUMP_PATTERN" ] && echo "$BRANCH" | grep -qE "$NO_BUMP_PATTERN"; then
+          IS_NOBUMP="true"
+        fi
+        BASE_SHA="$BASE_SHA_IN"
+        HEAD_SHA="$HEAD_SHA_IN"
+        if [ -z "$HEAD_SHA" ]; then
+          HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
+        fi
+        if [ -z "$BASE_SHA" ]; then
+          BREF="$BASE_REF_IN"
+          [ -z "$BREF" ] && BREF="$GITHUB_BASE_REF"
+          if [ -n "$BREF" ]; then
+            git fetch --no-tags origin "$BREF" 2>/dev/null || true
+            BASE_SHA=$(git merge-base "origin/$BREF" HEAD 2>/dev/null || git rev-parse "origin/$BREF" 2>/dev/null || git rev-parse HEAD~1 2>/dev/null)
+          else
+            BASE_SHA=$(git rev-parse HEAD~1 2>/dev/null)
+          fi
+        fi
+        CHANGED=""
+        if [ -n "$TEST_GIT_DIFF" ]; then
+          CHANGED="$TEST_GIT_DIFF"
+        elif [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ] && [ "$BASE_SHA" != "$HEAD_SHA" ]; then
+          CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB "${BASE_SHA}...${HEAD_SHA}" 2>/dev/null)
+        elif [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ]; then
+          CHANGED=$(git diff --name-only --diff-filter=ACMRTUXB "$BASE_SHA" "$HEAD_SHA" 2>/dev/null)
+        else
+          CHANGED=""
+        fi
+        CHANGED_CLEAN=$(echo "$CHANGED" | grep -v '^$' | tr '\r' '\n')
+        {
+          echo "changed-files<<EOF"
+          echo "$CHANGED_CLEAN"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        if [ -n "$CODE_PATHS_REGEX_IN" ]; then
+          CODE_RE="$CODE_PATHS_REGEX_IN"
+        else
+          CODE_RE='^src/|^lib/|^app/|^cmd/|^internal/|^pkg/|^collections/|^roles/|^playbooks/|^molecule/|^extensions/|^tests?/|^.*\.(py|go|rs|ts|tsx|js|jsx|mjs|cjs|sh|bash|zsh|tf|hcl|java|kt|scala|rb|php|cs|swift|cpp|c|h|hpp|toml|ini|cfg|lock|gradle|mod|sum|j2)$'
+        fi
+        ALLOWED_RE="$NO_BUMP_ALLOWED_PATHS_IN"
+        [ -z "$ALLOWED_RE" ] && ALLOWED_RE='^\.github/workflows/|^\.github/actions/|^\.pre-commit-config\.yaml$|^\.yamllint.*$|^\.markdownlint.*$|^docs?/|^README\.md$|^CONTRIBUTING\.md$|^CHANGELOG\.md$|^LICENSE.*$|^.*\.md$|^\.gitignore$|^\.gitattributes$'
+        CODE_CHANGED="false"
+        if [ -n "$CHANGED_CLEAN" ]; then
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qE "$ALLOWED_RE"; then
+              continue
+            fi
+            if echo "$f" | grep -qE "$CODE_RE"; then
+              CODE_CHANGED="true"
+            else
+              CODE_CHANGED="true"
+            fi
+          done <<< "$CHANGED_CLEAN"
+        fi
+        ONLY_ALLOWED_STRICT="true"
+        if [ -n "$CHANGED_CLEAN" ]; then
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qE "$ALLOWED_RE"; then
+              continue
+            fi
+            ONLY_ALLOWED_STRICT="false"
+            break
+          done <<< "$CHANGED_CLEAN"
+        fi
+        SCOPE_VALID="true"
+        if [ "$IS_NOBUMP" = "true" ] && [ "$CODE_CHANGED" = "true" ]; then
+          SCOPE_VALID="false"
+        fi
+        echo "scope_valid=$SCOPE_VALID" >> "$GITHUB_OUTPUT"
+        echo "code-files-changed=$CODE_CHANGED" >> "$GITHUB_OUTPUT"
+        echo "only-docs-changed=$ONLY_ALLOWED_STRICT" >> "$GITHUB_OUTPUT"
+        if [ "$IS_NOBUMP" = "true" ]; then
+          echo "no-bump branch detected, code_changed=$CODE_CHANGED scope_valid=$SCOPE_VALID"
+        fi
+        if [ "$IS_NOBUMP" = "true" ] && [ "$CODE_CHANGED" = "true" ] && [ "$FAIL_ON_INVALID_SCOPE" = "true" ]; then
+          echo "❌ Branch '$BRANCH' matches no-bump pattern but modified code files outside allowed paths."
+          exit 1
+        fi
+
+    - name: Decide branch validity
+      id: decide
+      shell: bash
+      env:
+        BRANCH_VALID: ${{ inputs.allowed-branch-pattern == '' && 'true' || (steps.validate-branch.outputs.valid != '' && steps.validate-branch.outputs.valid || steps.validate-branch-disabled.outputs.valid) }}
+        SCOPE_VALID: ${{ steps.scope.outputs.scope_valid }}
+        ENFORCE: ${{ inputs.enforce-no-bump-scope }}
+      run: |
+        BV="${BRANCH_VALID:-true}"
+        SV="${SCOPE_VALID:-true}"
+        if [ "$ENFORCE" = "true" ] && [ "$SV" = "false" ]; then
+          echo "branch_valid=false" >> "$GITHUB_OUTPUT"
+          echo "❌ Branch invalid due to no-bump scope violation"
+          exit 0
+        fi
+        echo "branch_valid=$BV" >> "$GITHUB_OUTPUT"

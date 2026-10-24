@@ -70,6 +70,9 @@ def eval_if(cond, results, inputs, base_ref, event_name):
         lambda m: repr(results.get(m.group(1), "")),
         e,
     )
+    # Handle needs.<job>.outputs.<output> - assume true for plan outputs in test
+    e = re.sub(r"needs\.plan\.outputs\.[A-Za-z0-9_-]+", "'true'", e)
+    e = re.sub(r"needs\.([A-Za-z0-9_-]+)\.outputs\.[A-Za-z0-9_-]+", "'true'", e)
     e = e.replace("always()", "True")
     e = re.sub(r"github\.base_ref", repr(base_ref), e)
     # Dependency Review is PR-only, so its `if` reads the event name. These
@@ -148,11 +151,12 @@ def main():
     script, env_exprs = gate_script(jobs)
 
     expected = {
-        "unit": ["detect", "build"],
-        "package": ["detect", "build"],
-        "integration": ["detect", "package"],
-        "security": ["detect"],
-        "dependency-review": [],
+        "unit": ["detect", "plan", "build"],
+        "package": ["detect", "plan", "build"],
+        "integration": ["detect", "plan", "package"],
+        "security": ["detect", "plan"],
+        "dependency-review": ["detect", "plan"],
+        "pre-commit": ["detect", "plan"],
         "report": [
             "unit",
             "integration",

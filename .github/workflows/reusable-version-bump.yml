@@ -27,6 +27,35 @@ name: Version Bump
         description: Regex pattern for branches that should skip version bump (optional)
         type: string
         default: ''
+      enforce-no-bump-scope:
+        description: If true, branches matching no-bump-branch-pattern may only touch allowed paths
+        type: boolean
+        default: false
+      fail-on-invalid-scope:
+        description: Fail the job if a no-bump branch touches code files outside allowed paths
+        type: boolean
+        default: false
+      code-paths-regex:
+        description: Regex of code paths from detect-technology (optional)
+        type: string
+        default: ''
+      no-bump-allowed-paths:
+        description: Regex for paths allowed on no-bump branches
+        type: string
+        default: |-
+          ^\.github/workflows/.*
+          ^\.github/actions/.*
+          ^\.pre-commit-config\.yaml$
+          ^\.yamllint.*$
+          ^\.markdownlint.*$
+          ^docs?/.*
+          ^README\.md$
+          ^CONTRIBUTING\.md$
+          ^CHANGELOG\.md$
+          ^LICENSE.*$
+          ^.*\.md$
+          ^\.gitignore$
+          ^\.gitattributes$
       base-version-source:
         description: |
           Where to read the base version for the bump: 'tag' (highest release tag
@@ -65,6 +94,13 @@ jobs:
           target-branch: ${{ github.base_ref }}
           allowed-target-branches: ${{ inputs.allowed-target-branches }}
           no-bump-branch-pattern: ${{ inputs.no-bump-branch-pattern }}
+          enforce-no-bump-scope: ${{ inputs.enforce-no-bump-scope }}
+          fail-on-invalid-scope: ${{ inputs.fail-on-invalid-scope }}
+          code-paths-regex: ${{ inputs.code-paths-regex }}
+          no-bump-allowed-paths: ${{ inputs.no-bump-allowed-paths }}
+          base-sha: ${{ github.event.pull_request.base.sha || '' }}
+          head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          base-ref: ${{ github.base_ref || '' }}
 
       - name: Fail if branch name invalid
         if: ${{ steps.validate.outputs.branch-valid == 'false' && inputs.fail-on-invalid-branch }}

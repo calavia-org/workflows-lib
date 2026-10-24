@@ -63,6 +63,12 @@ outputs:
   python-matrix:
     description: 'JSON array of Python versions for the unit-test matrix'
     value: ${{ steps.detect.outputs.python-matrix }}
+  code-globs:
+    description: 'JSON array of globs for code files (for diff-based scope checks)'
+    value: ${{ steps.code-globs.outputs.globs }}
+  code-paths-regex:
+    description: 'Regex matching code files (for diff-based scope checks)'
+    value: ${{ steps.code-globs.outputs.regex }}
 runs:
   using: composite
   steps:
@@ -334,3 +340,64 @@ runs:
         # Summary
         echo "Detected $COUNT technology(ies): $TECHS"
         echo "Primary technology: $PRIMARY"
+
+    - name: Build code globs and regex
+      id: code-globs
+      shell: bash
+      env:
+        TECHS: ${{ steps.detect.outputs.technologies }}
+      run: |
+        # Tech-aware code globs/regex to identify code files vs docs/config.
+        GLOBS='["**/*.py","**/*.go","**/*.rs","**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","**/*.java","**/*.kt","**/*.scala","**/*.rb","**/*.php","**/*.cs","**/*.swift","**/*.cpp","**/*.c","**/*.h","**/*.hpp","**/*.sh","**/*.bash","**/*.zsh","**/*.tf","**/*.hcl","**/*.toml","**/*.ini","**/*.cfg","**/*.lock","go.mod","go.sum","requirements*.txt","Pipfile*","pyproject.toml","package.json","package-lock.json","yarn.lock","pnpm-lock.yaml","poetry.lock","Cargo.toml","Cargo.lock","pom.xml","build.gradle*","settings.gradle*","galaxy.yml","requirements.yml","playbooks/**/*","roles/**/*","collections/**/*","extensions/**/*","Dockerfile","Containerfile"]'
+        if echo ",$TECHS," | grep -q ",ansible-collection,"; then
+          GLOBS='["collections/**/*","roles/**/*","playbooks/**/*","extensions/**/*","molecule/**/*","galaxy.yml","requirements.yml","**/*.yml","**/*.yaml","**/*.j2"]'
+        elif echo ",$TECHS," | grep -q ",python,"; then
+          GLOBS='["**/*.py","pyproject.toml","setup.py","setup.cfg","requirements*.txt","Pipfile*","poetry.lock","uv.lock"]'
+        elif echo ",$TECHS," | grep -q ",nodejs,"; then
+          GLOBS='["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","package.json","package-lock.json","yarn.lock","pnpm-lock.yaml","tsconfig*.json"]'
+        elif echo ",$TECHS," | grep -q ",go,"; then
+          GLOBS='["**/*.go","go.mod","go.sum"]'
+        elif echo ",$TECHS," | grep -q ",rust,"; then
+          GLOBS='["**/*.rs","Cargo.toml","Cargo.lock"]'
+        elif echo ",$TECHS," | grep -q ",java,"; then
+          GLOBS='["**/*.java","**/*.kt","**/*.scala","pom.xml","build.gradle*","settings.gradle*"]'
+        elif echo ",$TECHS," | grep -q ",container,"; then
+          GLOBS='["Dockerfile","Containerfile","**/*.dockerfile","docker-compose*.yml","docker-compose*.yaml"]'
+        elif echo ",$TECHS," | grep -q ",helm,"; then
+          GLOBS='["**/*.yaml","**/*.yml","**/*.tpl","values*.yaml","Chart.yaml"]'
+        fi
+        # Also add common code dirs/extensions
+        GLOBS=$(python3 -c "
+import json,os
+g=json.loads(os.environ['GLOBS'])
+base=['src/**','lib/**','app/**','cmd/**','internal/**','pkg/**']
+g2=list(dict.fromkeys(g+base))
+print(json.dumps(g2))
+" 2>/dev/null || echo "$GLOBS")
+        # Build regex
+        REGEX=$(python3 -c "
+import json,os,re
+g=json.loads(os.environ['GLOBS'])
+# convert simple globs to regex patterns
+patterns=[]
+for pat in g:
+    p=pat
+    # very simple conversion
+    p=p.replace('**/','').replace('**','.*')
+    p=p.replace('.','\\.').replace('*','[^/]*')
+    patterns.append('^'+p+'$')
+# also add broad code patterns
+patterns.extend([r'^src/.*', r'^lib/.*', r'^app/.*', r'^cmd/.*', r'^internal/.*', r'^pkg/.*', r'^collections/.*', r'^roles/.*', r'^playbooks/.*', r'^molecule/.*', r'^extensions/.*', r'^tests?/.*', r'.*\.(py|go|rs|ts|tsx|js|jsx|mjs|cjs|sh|bash|zsh|tf|hcl|java|kt|scala|rb|php|cs|swift|cpp|c|h|hpp|toml|ini|cfg|lock|gradle|mod|sum|j2)$'])
+# dedupe
+seen=set(); out=[]
+for pr in patterns:
+    if pr not in seen:
+        seen.add(pr); out.append(pr)
+print('|'.join(out))
+" 2>/dev/null || echo '^(src|lib|app|cmd|internal|pkg|collections|roles|playbooks|molecule|extensions)/|.*\.(py|go|rs|ts|tsx|js|jsx|mjs|cjs|sh|bash|zsh|tf|hcl|java|kt|scala|rb|php|cs|swift|cpp|c|h|hpp|toml|ini|cfg|lock|gradle|mod|sum|j2)$')
+        {
+          echo "globs<<EOF"
+          echo "$GLOBS"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        echo "regex=$REGEX" >> "$GITHUB_OUTPUT"

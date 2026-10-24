@@ -58,6 +58,41 @@ name: CI
         type: boolean
         required: false
         default: false
+      enforce-no-bump-scope:
+        description: 'Enforce no-bump branches only touch allowed paths (docs/ci/config)'
+        required: false
+        type: boolean
+        default: false
+      fail-on-invalid-scope:
+        description: 'Fail CI if no-bump branch touches code files outside allowed paths'
+        required: false
+        type: boolean
+        default: false
+      plan-strict-nobump:
+        description: 'For no-bump branches, run only pre-commit'
+        required: false
+        type: boolean
+        default: true
+      skip-stages:
+        description: 'Comma separated stages to force skip'
+        required: false
+        type: string
+        default: ''
+      no-bump-branch-pattern:
+        description: 'Regex pattern for branches that should skip version bump'
+        required: false
+        type: string
+        default: ''
+      allowed-branch-pattern:
+        description: 'Regex pattern for allowed branch names'
+        required: false
+        type: string
+        default: ^(major|feat|fix|doc|chore|docs|ci|test|refactor|perf|style|dependabot)/.+
+      allowed-target-branches:
+        description: 'Comma-separated list of allowed target branch patterns'
+        required: false
+        type: string
+        default: main,release/*
       custom-pre-commit-config:
         description: 'Path to custom pre-commit config'
         type: string
@@ -296,9 +331,9 @@ jobs:
     outputs:
       technologies: ${{ steps.detect.outputs.technologies }}
       primary: ${{ steps.detect.outputs.primary }}
-      # Derived from the tox env list; single-version fallback for non-Python
-      # repos or a missing tox file, so the unit matrix is never empty.
       python-matrix: ${{ steps.detect.outputs.python-matrix }}
+      code-globs: ${{ steps.detect.outputs.code-globs }}
+      code-paths-regex: ${{ steps.detect.outputs.code-paths-regex }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -316,12 +351,116 @@ jobs:
           tox-ini: ${{ inputs.tox-ini }}
           python-version: ${{ inputs.python-version }}
 
+  plan:
+    name: Plan CI Execution
+    runs-on: ${{ inputs.runner-label }}
+    needs: [detect]
+    timeout-minutes: 5
+    outputs:
+      run-pre-commit: ${{ steps.plan.outputs.run-pre-commit }}
+      run-security: ${{ steps.plan.outputs.run-security }}
+      run-dependency-review: ${{ steps.plan.outputs.run-dependency-review }}
+      run-unit: ${{ steps.plan.outputs.run-unit }}
+      run-build: ${{ steps.plan.outputs.run-build }}
+      run-package: ${{ steps.plan.outputs.run-package }}
+      run-integration: ${{ steps.plan.outputs.run-integration }}
+      run-pre-release: ${{ steps.plan.outputs.run-pre-release }}
+      is-nobump: ${{ steps.plan.outputs.is-nobump }}
+      scope-valid: ${{ steps.plan.outputs.scope-valid }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate branch and scope
+        id: validate
+        uses: $/.github/actions/validate-branch
+        with:
+          branch: ${{ github.head_ref || github.ref_name }}
+          allowed-branch-pattern: ${{ inputs.allowed-branch-pattern }}
+          target-branch: ${{ github.base_ref || github.ref_name }}
+          allowed-target-branches: ${{ inputs.allowed-target-branches }}
+          no-bump-branch-pattern: ${{ inputs.no-bump-branch-pattern }}
+          base-sha: ${{ github.event.pull_request.base.sha || '' }}
+          head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          base-ref: ${{ github.base_ref || '' }}
+          enforce-no-bump-scope: ${{ inputs.enforce-no-bump-scope }}
+          fail-on-invalid-scope: ${{ inputs.fail-on-invalid-scope }}
+          code-paths-regex: ${{ needs.detect.outputs.code-paths-regex }}
+      - name: Plan stage execution
+        id: plan
+        shell: bash
+        env:
+          SHOULD_BUMP: ${{ steps.validate.outputs.should-bump }}
+          SCOPE_VALID: ${{ steps.validate.outputs.scope-valid }}
+          ENFORCE_SCOPE: ${{ inputs.enforce-no-bump-scope }}
+          PLAN_STRICT: ${{ inputs.plan-strict-nobump }}
+          SKIP_STAGES: ${{ inputs.skip-stages }}
+          INPUT_RUN_PRE_COMMIT: ${{ inputs.run-pre-commit }}
+          INPUT_RUN_SECURITY: ${{ inputs.run-security-scans }}
+          INPUT_RUN_DEP_REVIEW: ${{ inputs.security-dependency-review }}
+          INPUT_RUN_UNIT: ${{ inputs.run-unit-tests }}
+          INPUT_RUN_BUILD: ${{ inputs.run-build }}
+          INPUT_RUN_PACKAGE: ${{ inputs.run-package }}
+          INPUT_RUN_INTEGRATION: ${{ inputs.run-integration-tests }}
+          INPUT_RUN_PRE_RELEASE: ${{ inputs.prerelease-enabled }}
+        run: |
+          IS_NOBUMP="false"
+          if [ "$SHOULD_BUMP" = "false" ]; then
+            IS_NOBUMP="true"
+          fi
+          if [ "$ENFORCE_SCOPE" = "true" ] && [ "${SCOPE_VALID:-true}" = "false" ]; then
+            echo "::error::No-bump branch touches code files outside allowed paths"
+            exit 1
+          fi
+          RUN_PRE_COMMIT="$INPUT_RUN_PRE_COMMIT"
+          RUN_SECURITY="$INPUT_RUN_SECURITY"
+          RUN_DEP_REVIEW="$INPUT_RUN_DEP_REVIEW"
+          RUN_UNIT="$INPUT_RUN_UNIT"
+          RUN_BUILD="$INPUT_RUN_BUILD"
+          RUN_PACKAGE="$INPUT_RUN_PACKAGE"
+          RUN_INTEGRATION="$INPUT_RUN_INTEGRATION"
+          RUN_PRE_RELEASE="$INPUT_RUN_PRE_RELEASE"
+          if [ "$IS_NOBUMP" = "true" ] && [ "$PLAN_STRICT" = "true" ]; then
+            RUN_SECURITY="false"
+            RUN_DEP_REVIEW="false"
+            RUN_UNIT="false"
+            RUN_BUILD="false"
+            RUN_PACKAGE="false"
+            RUN_INTEGRATION="false"
+            RUN_PRE_RELEASE="false"
+          fi
+          IFS=',' read -ra SKIP <<< "$SKIP_STAGES"
+          for s in "${SKIP[@]}"; do
+            s=$(echo "$s" | xargs)
+            case "$s" in
+              pre-commit) RUN_PRE_COMMIT="false" ;;
+              security) RUN_SECURITY="false" ;;
+              dependency-review) RUN_DEP_REVIEW="false" ;;
+              unit|test) RUN_UNIT="false" ;;
+              build) RUN_BUILD="false" ;;
+              package) RUN_PACKAGE="false" ;;
+              integration) RUN_INTEGRATION="false" ;;
+              pre-release) RUN_PRE_RELEASE="false" ;;
+            esac
+          done
+          echo "run-pre-commit=$RUN_PRE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "run-security=$RUN_SECURITY" >> "$GITHUB_OUTPUT"
+          echo "run-dependency-review=$RUN_DEP_REVIEW" >> "$GITHUB_OUTPUT"
+          echo "run-unit=$RUN_UNIT" >> "$GITHUB_OUTPUT"
+          echo "run-build=$RUN_BUILD" >> "$GITHUB_OUTPUT"
+          echo "run-package=$RUN_PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "run-integration=$RUN_INTEGRATION" >> "$GITHUB_OUTPUT"
+          echo "run-pre-release=$RUN_PRE_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "is-nobump=$IS_NOBUMP" >> "$GITHUB_OUTPUT"
+          echo "scope-valid=${SCOPE_VALID:-true}" >> "$GITHUB_OUTPUT"
+
   pre-commit:
     name: Pre-Commit
-    needs: detect
+    needs: [detect, plan]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-pre-commit }}
+    if: ${{ needs.plan.outputs.run-pre-commit == 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -345,10 +484,10 @@ jobs:
   # to triage the PR.
   security:
     name: Security Scan
-    needs: detect
+    needs: [detect, plan]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-security-scans && (needs.detect.result == 'success' || needs.detect.result == 'skipped') }}
+    if: ${{ always() && needs.plan.outputs.run-security == 'true' && inputs.run-security-scans && (needs.detect.result == 'success' || needs.detect.result == 'skipped') }}
     permissions:
       contents: read
       security-events: write
@@ -400,15 +539,12 @@ jobs:
           extra-args: ${{ inputs.security-dependencies-extra-args }}
           github-token: ${{ secrets.github-token || secrets.GITHUB_TOKEN }}
 
-  # Dependency Review is a pull-request gate, not a scanner: it reads the GitHub
-  # dependency graph and reports only the vulnerabilities a PR introduces, which
-  # is fast enough to run on every PR. It complements the full OSV-Scanner leg,
-  # which resolves every manifest in the repository and is the slow path.
   dependency-review:
     name: Dependency Review
+    needs: [detect, plan]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ github.event_name == 'pull_request' && inputs.security-dependency-review }}
+    if: ${{ always() && needs.plan.outputs.run-dependency-review == 'true' && github.event_name == 'pull_request' && inputs.security-dependency-review }}
     permissions:
       contents: read
       pull-requests: write
@@ -431,10 +567,10 @@ jobs:
     # `pre-commit` is deliberately NOT a prerequisite: lint is a quality check
     # like the tests are, not an input the tests consume, so it is asserted by
     # the `report` gate instead of blocking the tests from running.
-    needs: [detect, build]
+    needs: [detect, plan, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && needs.plan.outputs.run-unit == 'true' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
@@ -578,10 +714,10 @@ jobs:
     # (the `docker` case `docker save`s an image produced by `docker build`).
     # A `failed` build is not accepted: there is nothing to package. When
     # `build` is disabled the result is `skipped`, which is accepted.
-    needs: [detect, build]
+    needs: [detect, plan, build]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-package && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    if: ${{ always() && needs.plan.outputs.run-package == 'true' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -681,10 +817,10 @@ jobs:
     # `package` is a prerequisite for the same reason as `build` for `unit`.
     # `always()` is required: without it a *disabled* `package` would cascade
     # an automatic skip into integration even when integration tests are on.
-    needs: [detect, package]
+    needs: [detect, plan, package]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ always() && needs.plan.outputs.run-integration == 'true' && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
