@@ -78,6 +78,21 @@ name: CI
         type: string
         required: false
         default: ''
+      run-molecule-parallel:
+        description: 'When true and molecule scenarios are detected for ansible-collection repos, run each scenario in parallel'
+        type: boolean
+        required: false
+        default: true
+      molecule-search-paths:
+        description: 'Comma-separated paths to search for molecule scenarios'
+        type: string
+        required: false
+        default: 'extensions/molecule,molecule'
+      molecule-scenarios-matrix:
+        description: 'JSON array to override molecule scenarios matrix (for testing/customization)'
+        type: string
+        required: false
+        default: ''
       build-command:
         description: 'Override build command'
         type: string
@@ -676,25 +691,35 @@ jobs:
   # heavy tier (molecule/Docker), and because they usually dominate the
   # critical path, overlapping them with the other tiers is what keeps the
   # whole run close to the duration of integration alone.
+  discover-molecule:
+    name: Discover Molecule Scenarios
+    needs: [detect]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    if: ${{ always() && inputs.run-integration-tests && inputs.run-molecule-parallel && (needs.detect.outputs.primary == 'ansible' || needs.detect.outputs.technologies == 'ansible-collection' || contains(needs.detect.outputs.technologies, 'ansible')) }}
+    outputs:
+      scenarios: ${{ steps.discover.outputs.scenarios }}
+      count: ${{ steps.discover.outputs.count }}
+      has-molecule: ${{ steps.discover.outputs.has-molecule }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: discover
+        uses: $/.github/actions/discover-molecule-scenarios
+        with:
+          search-paths: ${{ inputs.molecule-search-paths }}
+
   integration:
     name: Integration Test
-    # `package` is a prerequisite for the same reason as `build` for `unit`.
-    # `always()` is required: without it a *disabled* `package` would cascade
-    # an automatic skip into integration even when integration tests are on.
-    needs: [detect, package]
+    needs: [detect, package, discover-molecule]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
+    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.discover-molecule.result == 'success' || needs.discover-molecule.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
-      # Integration legs fan out over the same tox-declared interpreter matrix
-      # as unit by default: dependency resolution diverges per Python, and a
-      # single interpreter hides that. `integration-python-matrix` lets a
-      # consumer pin or widen the set (e.g. molecule scenarios that only
-      # support one interpreter); empty means "same as unit".
-      matrix:
-        python-version: ${{ fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix) }}
+      matrix: ${{ fromJSON(inputs.molecule-scenarios-matrix != '' && inputs.molecule-scenarios-matrix || (needs.discover-molecule.outputs.has-molecule == 'true' && needs.discover-molecule.outputs.count != '0' && needs.discover-molecule.outputs.scenarios != '[]' ? format('{{"scenario":{0}}}', needs.discover-molecule.outputs.scenarios) : format('{{"python-version":{0}}}', fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix))) ) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -707,7 +732,7 @@ jobs:
           run-integration-tests: true
           run-e2e-tests: ${{ inputs.run-e2e-tests }}
           integration-test-command: ${{ inputs.integration-test-command }}
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version || inputs.python-version }}
           node-version: ${{ inputs.node-version }}
           go-version: ${{ inputs.go-version }}
           rust-toolchain: ${{ inputs.rust-toolchain }}
@@ -721,6 +746,7 @@ jobs:
           extra-args: ${{ inputs.extra-args }}
           coverage-format: ${{ inputs.coverage-format }}
           fail-fast: ${{ inputs.fail-fast }}
+          molecule-scenario: ${{ matrix.scenario || '' }}
 
   # Pre-releases are only ever cut from a release/* base branch, so ordinary
   # PRs against main never create a release. The artifact list is resolved per
