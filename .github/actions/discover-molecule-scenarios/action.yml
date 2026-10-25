@@ -60,6 +60,34 @@ runs:
             scenario_name=$(basename "$scenario_dir")
             [ -f "$scenario_dir/molecule.yml" ] || continue
 
+            # Apply only-patterns (whitelist) if provided
+            if [ -n "$ONLY_PATTERNS" ]; then
+              MATCHED_ONLY=false
+              IFS=',' read -ra ONLY <<< "$ONLY_PATTERNS"
+              for pattern in "${ONLY[@]}"; do
+                pattern=$(echo "$pattern" | xargs)
+                if [[ "$scenario_name" == $pattern ]] || echo "$scenario_name" | grep -Eq "$pattern"; then
+                  MATCHED_ONLY=true
+                  break
+                fi
+              done
+              [ "$MATCHED_ONLY" = "true" ] || continue
+            fi
+
+            # Apply exclude-patterns if provided
+            if [ -n "$EXCLUDE_PATTERNS" ]; then
+              SKIP=false
+              IFS=',' read -ra EXCLUDE <<< "$EXCLUDE_PATTERNS"
+              for pattern in "${EXCLUDE[@]}"; do
+                pattern=$(echo "$pattern" | xargs)
+                if [[ "$scenario_name" == $pattern ]] || echo "$scenario_name" | grep -Eq "$pattern"; then
+                  SKIP=true
+                  break
+                fi
+              done
+              [ "$SKIP" = "true" ] && continue
+            fi
+
             # Apply filter regex if provided
             if [ -n "$FILTER_REGEX" ]; then
               if ! echo "$scenario_name" | grep -Eq "$FILTER_REGEX"; then
@@ -83,12 +111,15 @@ runs:
           echo "scenarios=[]" >> "$GITHUB_OUTPUT"
           echo "count=0" >> "$GITHUB_OUTPUT"
           echo "has-molecule=false" >> "$GITHUB_OUTPUT"
+          echo "scenarios-matrix={"scenario":[]}" >> "$GITHUB_OUTPUT"
           echo "No molecule scenarios found"
         else
           # Convert to JSON array
-          JSON_ARRAY=$(printf '%s\n' "${UNIQUE_SCENARIOS[@]}" | jq -R . | jq -s -c .)
+          JSON_ARRAY=$(printf "%s\n" "${UNIQUE_SCENARIOS[@]}" | jq -R . | jq -s -c .)
+          MATRIX_JSON=$(echo "$JSON_ARRAY" | jq -c '{scenario: .}')
           echo "scenarios=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "has-molecule=true" >> "$GITHUB_OUTPUT"
+          echo "scenarios-matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
           echo "Found $COUNT molecule scenario(s): ${UNIQUE_SCENARIOS[*]}"
         fi
