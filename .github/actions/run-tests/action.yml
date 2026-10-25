@@ -97,6 +97,14 @@ inputs:
     description: 'Extra arguments to pass to test commands'
     required: false
     default: ''
+  molecule-scenario:
+    description: 'Run only this specific molecule scenario (for parallel matrix execution)'
+    required: false
+    default: ''
+  molecule-project-directory:
+    description: 'MOLECULE_PROJECT_DIRECTORY for molecule scenarios'
+    required: false
+    default: ''
 
 runs:
   using: composite
