@@ -130,9 +130,7 @@ def test_integration_matrix_is_planned():
 
 def test_integration_plan_falls_back_to_detect_output():
     plan = jobs()["integration-plan"]
-    step = next(
-        s for s in plan["steps"] if s.get("id") == "matrix"
-    )
+    step = next(s for s in plan["steps"] if s.get("id") == "matrix")
     env = step.get("env", {})
     run = step["run"]
     assert env.get("PYTHON_MATRIX") == "${{ needs.detect.outputs.python-matrix }}", (
@@ -140,8 +138,7 @@ def test_integration_plan_falls_back_to_detect_output():
         f"env; env: {env}"
     )
     assert "INTEGRATION_PYTHON_MATRIX" in env, (
-        "integration-plan must receive the consumer python matrix pin; "
-        f"env: {env}"
+        f"integration-plan must receive the consumer python matrix pin; env: {env}"
     )
     assert "python-version" in run, (
         "integration-plan must emit a python-version matrix when no "

@@ -94,7 +94,6 @@ def eval_if(cond, results, inputs, base_ref, event_name, *, detect_outputs=None)
         raise SystemExit(f"cannot evaluate {cond!r} -> {e!r}: {exc}")
 
 
-
 def has_status_fn(cond):
     return bool(cond) and any(f in cond for f in ("always()", "success()", "failure()"))
 
