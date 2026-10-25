@@ -63,6 +63,15 @@ outputs:
   python-matrix:
     description: 'JSON array of Python versions for the unit-test matrix'
     value: ${{ steps.detect.outputs.python-matrix }}
+  has-molecule:
+    description: 'Whether molecule scenarios were found'
+    value: ${{ steps.detect.outputs.has-molecule }}
+  molecule-scenarios:
+    description: 'JSON array of discovered molecule scenario names'
+    value: ${{ steps.detect.outputs.molecule-scenarios }}
+  molecule-scenarios-count:
+    description: 'Number of discovered molecule scenarios'
+    value: ${{ steps.detect.outputs.molecule-scenarios-count }}
 runs:
   using: composite
   steps:
@@ -312,6 +321,31 @@ runs:
           else
             echo "::warning::no tox file found ($TOX_INI or tox-ansible.ini) — python matrix falls back to $PYTHON_VERSION"
           fi
+        fi
+
+        # Discover molecule scenarios
+        MOLECULE_SCENARIOS_ARRAY=()
+        for search_path in "extensions/molecule" "molecule"; do
+          [ -d "$search_path" ] || continue
+          for scenario_dir in "$search_path"/*; do
+            [ -d "$scenario_dir" ] || continue
+            scenario_name=$(basename "$scenario_dir")
+            [ -f "$scenario_dir/molecule.yml" ] || continue
+            MOLECULE_SCENARIOS_ARRAY+=("$scenario_name")
+          done
+        done
+
+        if [ ${#MOLECULE_SCENARIOS_ARRAY[@]} -gt 0 ]; then
+          UNIQUE_MOLECULE=($(printf "%s\n" "${MOLECULE_SCENARIOS_ARRAY[@]}" | awk '!seen[$0]++'))
+          MOLECULE_COUNT=${#UNIQUE_MOLECULE[@]}
+          MOLECULE_JSON=$(printf "%s\n" "${UNIQUE_MOLECULE[@]}" | jq -R . | jq -s -c .)
+          echo "has-molecule=true" >> "$GITHUB_OUTPUT"
+          echo "molecule-scenarios=$MOLECULE_JSON" >> "$GITHUB_OUTPUT"
+          echo "molecule-scenarios-count=$MOLECULE_COUNT" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-molecule=false" >> "$GITHUB_OUTPUT"
+          echo "molecule-scenarios=[]" >> "$GITHUB_OUTPUT"
+          echo "molecule-scenarios-count=0" >> "$GITHUB_OUTPUT"
         fi
 
         # Set outputs

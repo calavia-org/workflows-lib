@@ -97,6 +97,14 @@ inputs:
     description: 'Extra arguments to pass to test commands'
     required: false
     default: ''
+  molecule-scenario:
+    description: 'Run only this specific molecule scenario (for parallel matrix execution)'
+    required: false
+    default: ''
+  molecule-project-directory:
+    description: 'MOLECULE_PROJECT_DIRECTORY for molecule scenarios'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -257,7 +265,15 @@ runs:
             fi
             ;;
           ansible)
-            if [ -f "${{ inputs.tox-ini }}" ]; then
+            # If a specific molecule scenario is requested, run it directly
+            if [ -n "${{ inputs.molecule-scenario }}" ]; then
+              if [ -d "extensions/molecule" ] || [ -d "molecule" ]; then
+                CMD="molecule test -s ${{ inputs.molecule-scenario }}"
+              else
+                echo "Molecule scenario requested but no molecule directory found"
+                CMD=""
+              fi
+            elif [ -f "${{ inputs.tox-ini }}" ]; then
               CMD="python -m tox --ansible --conf ${{ inputs.tox-ini }}"
             elif [ -n "${{ inputs.ansible-collection-path }}" ]; then
               CMD="ansible-test integration --requirements"

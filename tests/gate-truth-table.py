@@ -59,7 +59,7 @@ def topo(jobs):
     return order
 
 
-def eval_if(cond, results, inputs, base_ref, event_name):
+def eval_if(cond, results, inputs, base_ref, event_name, *, detect_outputs=None):
     if not cond:
         return True
     e = re.sub(r"\$\{\{(.*?)\}\}", r"\1", cond, flags=re.S).strip()
@@ -70,12 +70,24 @@ def eval_if(cond, results, inputs, base_ref, event_name):
         lambda m: repr(results.get(m.group(1), "")),
         e,
     )
+    # Model detect outputs used by discover-molecule. Default to a non-ansible
+    # repo so molecule discovery is skipped and the test focuses on gate logic.
+    detect_outputs = detect_outputs or {
+        "primary": "python",
+        "technologies": "python",
+    }
+    e = re.sub(
+        r"needs\.detect\.outputs\.([A-Za-z0-9_-]+)",
+        lambda m: repr(detect_outputs.get(m.group(1), "")),
+        e,
+    )
     e = e.replace("always()", "True")
     e = re.sub(r"github\.base_ref", repr(base_ref), e)
     # Dependency Review is PR-only, so its `if` reads the event name. These
     # scenarios model a PR check by default; a non-PR run must skip that job.
     e = re.sub(r"github\.event_name", repr(event_name), e)
     e = re.sub(r"startsWith\(([^,]+),\s*'([^']*)'\)", r"\1.startswith('\2')", e)
+    e = re.sub(r"contains\(([^,]+),\s*'([^']*)'\)", r"('\2' in \1)", e)
     try:
         return bool(eval(e, {"__builtins__": {}}, {}))
     except Exception as exc:
@@ -150,7 +162,9 @@ def main():
     expected = {
         "unit": ["detect", "build"],
         "package": ["detect", "build"],
-        "integration": ["detect", "package"],
+        "discover-molecule": ["detect"],
+        "integration-plan": ["detect", "discover-molecule"],
+        "integration": ["detect", "package", "discover-molecule", "integration-plan"],
         "security": ["detect"],
         "dependency-review": [],
         "report": [

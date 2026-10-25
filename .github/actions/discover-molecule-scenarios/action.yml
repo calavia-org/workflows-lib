@@ -1,0 +1,125 @@
+name: 'Discover Molecule Scenarios'
+description: 'Discover molecule scenarios for parallel matrix execution'
+inputs:
+  search-paths:
+    description: 'Comma-separated paths to search for molecule scenarios'
+    required: false
+    default: 'extensions/molecule,molecule'
+  filter-regex:
+    description: 'Optional regex to filter scenario names'
+    required: false
+    default: ''
+  exclude-patterns:
+    description: 'Comma-separated patterns to exclude (glob-style)'
+    required: false
+    default: ''
+  only-patterns:
+    description: 'Comma-separated patterns to include only (glob-style)'
+    required: false
+    default: ''
+  include-platform-specific:
+    description: 'Include platform-specific scenarios'
+    required: false
+    default: 'true'
+outputs:
+  scenarios:
+    description: 'JSON array of scenario names'
+    value: ${{ steps.discover.outputs.scenarios }}
+  count:
+    description: 'Number of scenarios found'
+    value: ${{ steps.discover.outputs.count }}
+  has-molecule:
+    description: 'Whether molecule scenarios were found'
+    value: ${{ steps.discover.outputs.has-molecule }}
+  scenarios-matrix:
+    description: 'Ready-to-use matrix JSON for GitHub Actions strategy'
+    value: ${{ steps.discover.outputs.scenarios-matrix }}
+runs:
+  using: composite
+  steps:
+    - id: discover
+      shell: bash
+      env:
+        SEARCH_PATHS: ${{ inputs.search-paths }}
+        FILTER_REGEX: ${{ inputs.filter-regex }}
+        EXCLUDE_PATTERNS: ${{ inputs.exclude-patterns }}
+        ONLY_PATTERNS: ${{ inputs.only-patterns }}
+        INCLUDE_PLATFORM_SPECIFIC: ${{ inputs.include-platform-specific }}
+      run: |
+        set -euo pipefail
+
+        SCENARIOS_ARRAY=()
+        IFS=',' read -ra PATHS <<< "$SEARCH_PATHS"
+
+        for search_path in "${PATHS[@]}"; do
+          search_path=$(echo "$search_path" | xargs)
+          [ -d "$search_path" ] || continue
+
+          for scenario_dir in "$search_path"/*; do
+            [ -d "$scenario_dir" ] || continue
+            scenario_name=$(basename "$scenario_dir")
+            [ -f "$scenario_dir/molecule.yml" ] || continue
+
+            # Apply only-patterns (whitelist) if provided
+            if [ -n "$ONLY_PATTERNS" ]; then
+              MATCHED_ONLY=false
+              IFS=',' read -ra ONLY <<< "$ONLY_PATTERNS"
+              for pattern in "${ONLY[@]}"; do
+                pattern=$(echo "$pattern" | xargs)
+                if [[ "$scenario_name" == $pattern ]] || echo "$scenario_name" | grep -Eq "$pattern"; then
+                  MATCHED_ONLY=true
+                  break
+                fi
+              done
+              [ "$MATCHED_ONLY" = "true" ] || continue
+            fi
+
+            # Apply exclude-patterns if provided
+            if [ -n "$EXCLUDE_PATTERNS" ]; then
+              SKIP=false
+              IFS=',' read -ra EXCLUDE <<< "$EXCLUDE_PATTERNS"
+              for pattern in "${EXCLUDE[@]}"; do
+                pattern=$(echo "$pattern" | xargs)
+                if [[ "$scenario_name" == $pattern ]] || echo "$scenario_name" | grep -Eq "$pattern"; then
+                  SKIP=true
+                  break
+                fi
+              done
+              [ "$SKIP" = "true" ] && continue
+            fi
+
+            # Apply filter regex if provided
+            if [ -n "$FILTER_REGEX" ]; then
+              if ! echo "$scenario_name" | grep -Eq "$FILTER_REGEX"; then
+                continue
+              fi
+            fi
+
+            SCENARIOS_ARRAY+=("$scenario_name")
+          done
+        done
+
+        # Remove duplicates while preserving order
+        if [ ${#SCENARIOS_ARRAY[@]} -gt 0 ]; then
+          UNIQUE_SCENARIOS=($(printf "%s\n" "${SCENARIOS_ARRAY[@]}" | awk '!seen[$0]++'))
+        else
+          UNIQUE_SCENARIOS=()
+        fi
+
+        COUNT=${#UNIQUE_SCENARIOS[@]}
+        if [ "$COUNT" -eq 0 ]; then
+          echo "scenarios=[]" >> "$GITHUB_OUTPUT"
+          echo "count=0" >> "$GITHUB_OUTPUT"
+          echo "has-molecule=false" >> "$GITHUB_OUTPUT"
+          echo "scenarios-matrix={"scenario":[]}" >> "$GITHUB_OUTPUT"
+          echo "No molecule scenarios found"
+        else
+          # Convert to JSON array
+          JSON_ARRAY=$(printf "%s\n" "${UNIQUE_SCENARIOS[@]}" | jq -R . | jq -s -c .)
+          MATRIX_JSON=$(echo "$JSON_ARRAY" | jq -c '{scenario: .}')
+          echo "scenarios=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "has-molecule=true" >> "$GITHUB_OUTPUT"
+          echo "scenarios-matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
+          echo "Found $COUNT molecule scenario(s): ${UNIQUE_SCENARIOS[*]}"
+        fi
