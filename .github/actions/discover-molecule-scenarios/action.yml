@@ -166,36 +166,26 @@ runs:
 
             AFFECTED=()
 
-            # Load scenario mapping if provided
-            declare -A SCENARIO_TO_PATTERNS
-            if [ -n "$SCENARIO_MAPPING" ] && [ -f "$SCENARIO_MAPPING" ]; then
-              if command -v yq >/dev/null 2>&1; then
-                for scenario in "${ALL_SCENARIOS[@]}"; do
-                  patterns=$(yq e ".\"$scenario\"[]" "$SCENARIO_MAPPING" 2>/dev/null || true)
-                  if [ -n "$patterns" ]; then
-                    SCENARIO_TO_PATTERNS["$scenario"]="$patterns"
-                  fi
-                done
-              elif command -v python3 >/dev/null 2>&1; then
-                for scenario in "${ALL_SCENARIOS[@]}"; do
-                  patterns=$(python3 -c "import yaml,sys; d=yaml.safe_load(open('$SCENARIO_MAPPING')); print(chr(10).join(d.get('$scenario', [])))" 2>/dev/null || true)
-                  if [ -n "$patterns" ]; then
-                    SCENARIO_TO_PATTERNS["$scenario"]="$patterns"
-                  fi
-                done
+            lookup_mapping() {
+              local scenario="$1"
+              if [ -z "$SCENARIO_MAPPING" ] || [ ! -f "$SCENARIO_MAPPING" ]; then
+                return
               fi
-            fi
+              if command -v yq >/dev/null 2>&1; then
+                yq e ".\"$scenario\"[]" "$SCENARIO_MAPPING" 2>/dev/null || true
+              elif command -v python3 >/dev/null 2>&1; then
+                python3 -c "import yaml; d=yaml.safe_load(open('$SCENARIO_MAPPING')); print(chr(10).join(d.get('$scenario', [])))" 2>/dev/null || true
+              fi
+            }
 
-            # Shared paths that should trigger all scenarios
             SHARED_PATTERNS=(
-              '^galaxy\.yml$'
-              '^meta/'
-              '^plugins/'
-              '^requirements'
-              '^mise\.toml$'
-              '^tox'
-              '^\.github/workflows/'
-              '^collections/'
+              '(^|/)galaxy\.yml$'
+              '(^|/)meta/'
+              '(^|/)plugins/'
+              '(^|/)requirements'
+              '(^|/)mise\.toml$'
+              '(^|/)tox'
+              '(^|/)\.github/workflows/'
             )
 
             SHARED_CHANGED=false
@@ -222,8 +212,8 @@ runs:
                     continue
                   fi
 
-                  # Mapping-based matches
-                  if [ -n "${SCENARIO_TO_PATTERNS[$scenario]:-}" ]; then
+                  MAPPING_PATTERNS=$(lookup_mapping "$scenario")
+                  if [ -n "$MAPPING_PATTERNS" ]; then
                     MATCHED=false
                     while IFS= read -r pattern; do
                       [ -n "$pattern" ] || continue
@@ -231,7 +221,7 @@ runs:
                         MATCHED=true
                         break
                       fi
-                    done <<< "${SCENARIO_TO_PATTERNS[$scenario]}"
+                    done <<< "$MAPPING_PATTERNS"
                     if [ "$MATCHED" == "true" ]; then
                       AFFECTED+=("$scenario")
                       continue
