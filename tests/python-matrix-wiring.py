@@ -119,24 +119,42 @@ def test_integration_matrix_input_is_opt_in_pin():
     )
 
 
-def test_integration_matrix_falls_back_to_detect_output():
+def test_integration_matrix_is_planned():
     matrix = jobs()["integration"]["strategy"]["matrix"]
-    assert (
-        matrix.get("python-version")
-        == "${{ fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix) }}"
-    ), (
-        "integration must expand the same tox-declared versions as unit "
-        "unless the consumer pins a narrower list; a hard-coded fallback "
-        f"hides cross-interpreter dependency breaks; matrix: {matrix}"
+    assert matrix == "${{ fromJSON(needs.integration-plan.outputs.matrix) }}", (
+        "integration must expand from the integration-plan job so molecule "
+        "scenarios can override the python matrix without complex inline "
+        f"expressions; matrix: {matrix}"
+    )
+
+
+def test_integration_plan_falls_back_to_detect_output():
+    plan = jobs()["integration-plan"]
+    step = next(
+        s for s in plan["steps"] if s.get("id") == "matrix"
+    )
+    env = step.get("env", {})
+    run = step["run"]
+    assert env.get("PYTHON_MATRIX") == "${{ needs.detect.outputs.python-matrix }}", (
+        "integration-plan must receive the detect python matrix as input "
+        f"env; env: {env}"
+    )
+    assert "INTEGRATION_PYTHON_MATRIX" in env, (
+        "integration-plan must receive the consumer python matrix pin; "
+        f"env: {env}"
+    )
+    assert "python-version" in run, (
+        "integration-plan must emit a python-version matrix when no "
+        f"molecule scenarios are found; run: {run}"
     )
 
 
 def test_integration_passes_matrix_version_to_run_tests():
     version = integration_run_tests_step()["with"]["python-version"]
-    assert version == "${{ matrix.python-version }}", (
-        "each integration leg must resolve dependencies under its own "
-        "Python, not the workflow default; "
-        f"run-tests with.python-version: {version}"
+    assert version == "${{ matrix.python-version || inputs.python-version }}", (
+        "each integration leg must resolve its own Python when the matrix "
+        "includes python-version (scenario-only matrices fall back to the "
+        "workflow default); run-tests with.python-version: {version}"
     )
 
 
@@ -215,7 +233,8 @@ def test_all():
     test_unit_matrix_derives_from_detect_output()
     test_unit_passes_matrix_version_to_run_tests()
     test_integration_matrix_input_is_opt_in_pin()
-    test_integration_matrix_falls_back_to_detect_output()
+    test_integration_matrix_is_planned()
+    test_integration_plan_falls_back_to_detect_output()
     test_integration_passes_matrix_version_to_run_tests()
     test_ansible_technology_installs_plugin()
     test_tox_ansible_conf_installs_plugin_for_python()
