@@ -336,11 +336,9 @@ runs:
         done
 
         if [ ${#MOLECULE_SCENARIOS_ARRAY[@]} -gt 0 ]; then
-          UNIQUE_MOLECULE=($(printf "%s
-" "${MOLECULE_SCENARIOS_ARRAY[@]}" | awk '!seen[$0]++'))
+          UNIQUE_MOLECULE=($(printf "%s\n" "${MOLECULE_SCENARIOS_ARRAY[@]}" | awk '!seen[$0]++'))
           MOLECULE_COUNT=${#UNIQUE_MOLECULE[@]}
-          MOLECULE_JSON=$(printf '%s
-' "${UNIQUE_MOLECULE[@]}" | jq -R . | jq -s -c .)
+          MOLECULE_JSON=$(printf "%s\n" "${UNIQUE_MOLECULE[@]}" | jq -R . | jq -s -c .)
           echo "has-molecule=true" >> "$GITHUB_OUTPUT"
           echo "molecule-scenarios=$MOLECULE_JSON" >> "$GITHUB_OUTPUT"
           echo "molecule-scenarios-count=$MOLECULE_COUNT" >> "$GITHUB_OUTPUT"
