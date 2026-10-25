@@ -93,6 +93,21 @@ name: CI
         type: string
         required: false
         default: ''
+      molecule-scenario-filter-mode:
+        description: 'all = full scenario matrix; affected = only scenarios touched by PR changes'
+        type: string
+        required: false
+        default: 'all'
+      molecule-scenario-mapping:
+        description: 'Optional path to a JSON/YAML mapping of scenario -> role/pattern list'
+        type: string
+        required: false
+        default: ''
+      molecule-affected-fallback-all:
+        description: 'Return all scenarios when affected-mode cannot determine any affected scenario'
+        type: boolean
+        required: false
+        default: true
       build-command:
         description: 'Override build command'
         type: string
@@ -710,6 +725,12 @@ jobs:
         uses: $/.github/actions/discover-molecule-scenarios
         with:
           search-paths: ${{ inputs.molecule-search-paths }}
+          filter-mode: ${{ inputs.molecule-scenario-filter-mode }}
+          scenario-mapping: ${{ inputs.molecule-scenario-mapping }}
+          fallback-all: ${{ inputs.molecule-affected-fallback-all }}
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          before-sha: ${{ github.event.before }}
 
   integration-plan:
     name: Integration Test Plan
