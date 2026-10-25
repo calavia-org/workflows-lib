@@ -506,12 +506,3 @@ runs:
         path: test-results/
         retention-days: 7
         if-no-files-found: ignore
-
-  molecule-scenario:
-    description: 'Run only this specific molecule scenario (for parallel matrix execution)'
-    required: false
-    default: ''
-  molecule-project-directory:
-    description: 'MOLECULE_PROJECT_DIRECTORY for molecule scenarios'
-    required: false
-    default: ''
