@@ -701,6 +701,7 @@ jobs:
       scenarios: ${{ steps.discover.outputs.scenarios }}
       count: ${{ steps.discover.outputs.count }}
       has-molecule: ${{ steps.discover.outputs.has-molecule }}
+      scenarios-matrix: ${{ steps.discover.outputs.scenarios-matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -710,16 +711,52 @@ jobs:
         with:
           search-paths: ${{ inputs.molecule-search-paths }}
 
+  integration-plan:
+    name: Integration Test Plan
+    needs: [detect, discover-molecule]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: 5
+    if: ${{ always() && inputs.run-integration-tests && (needs.discover-molecule.result == 'success' || needs.discover-molecule.result == 'skipped') }}
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        shell: bash
+        env:
+          OVERRIDE: ${{ inputs.molecule-scenarios-matrix }}
+          RUN_PARALLEL: ${{ inputs.run-molecule-parallel }}
+          HAS_MOLECULE: ${{ needs.discover-molecule.outputs.has-molecule }}
+          SCENARIOS_MATRIX: ${{ needs.discover-molecule.outputs.scenarios-matrix }}
+          INTEGRATION_PYTHON_MATRIX: ${{ inputs.integration-python-matrix }}
+          PYTHON_MATRIX: ${{ needs.detect.outputs.python-matrix }}
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE" ]; then
+            echo "matrix=$OVERRIDE" >> "$GITHUB_OUTPUT"
+            echo "Using override matrix: $OVERRIDE"
+          elif [ "$RUN_PARALLEL" == 'true' ] && [ "$HAS_MOLECULE" == 'true' ] && [ "$SCENARIOS_MATRIX" != '{"scenario":[]}' ]; then
+            echo "matrix=$SCENARIOS_MATRIX" >> "$GITHUB_OUTPUT"
+            echo "Using molecule scenario matrix: $SCENARIOS_MATRIX"
+          else
+            PY_MATRIX="$PYTHON_MATRIX"
+            if [ -n "$INTEGRATION_PYTHON_MATRIX" ]; then
+              PY_MATRIX="$INTEGRATION_PYTHON_MATRIX"
+            fi
+            MATRIX="{"python-version":$PY_MATRIX}"
+            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            echo "Using python matrix: $MATRIX"
+          fi
+
   integration:
     name: Integration Test
-    needs: [detect, package, discover-molecule]
+    needs: [detect, package, discover-molecule, integration-plan]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.discover-molecule.result == 'success' || needs.discover-molecule.result == 'skipped') }}
+    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.integration-plan.result == 'success' || needs.integration-plan.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
-      matrix: ${{ fromJSON(inputs.molecule-scenarios-matrix != '' && inputs.molecule-scenarios-matrix || (needs.discover-molecule.outputs.has-molecule == 'true' && needs.discover-molecule.outputs.count != '0' && needs.discover-molecule.outputs.scenarios != '[]' ? format('{{"scenario":{0}}}', needs.discover-molecule.outputs.scenarios) : format('{{"python-version":{0}}}', fromJSON(inputs.integration-python-matrix != '' && inputs.integration-python-matrix || needs.detect.outputs.python-matrix))) ) }}
+      matrix: ${{ fromJSON(needs.integration-plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
