@@ -742,7 +742,7 @@ jobs:
             if [ -n "$INTEGRATION_PYTHON_MATRIX" ]; then
               PY_MATRIX="$INTEGRATION_PYTHON_MATRIX"
             fi
-            MATRIX="{"python-version":$PY_MATRIX}"
+            MATRIX=$(echo "$PY_MATRIX" | jq -c '{"python-version": .}')
             echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
             echo "Using python matrix: $MATRIX"
           fi
