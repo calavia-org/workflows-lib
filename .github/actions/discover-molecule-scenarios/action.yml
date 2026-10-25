@@ -1,5 +1,5 @@
 name: 'Discover Molecule Scenarios'
-description: 'Discover molecule scenarios for parallel matrix execution'
+description: 'Discover molecule scenarios for parallel matrix execution, with optional PR filtering'
 inputs:
   search-paths:
     description: 'Comma-separated paths to search for molecule scenarios'
@@ -21,6 +21,30 @@ inputs:
     description: 'Include platform-specific scenarios'
     required: false
     default: 'true'
+  filter-mode:
+    description: 'all = every scenario; affected = only scenarios touched by changed files (PR mode)'
+    required: false
+    default: 'all'
+  base-sha:
+    description: 'Base SHA for changed-files diff (defaults to github.event.pull_request.base.sha)'
+    required: false
+    default: ''
+  head-sha:
+    description: 'Head SHA for changed-files diff (defaults to github.event.pull_request.head.sha or github.sha)'
+    required: false
+    default: ''
+  before-sha:
+    description: 'Push event before SHA fallback'
+    required: false
+    default: ''
+  scenario-mapping:
+    description: 'Optional path to a JSON/YAML mapping of scenario -> role/pattern list'
+    required: false
+    default: ''
+  fallback-all:
+    description: 'Return all scenarios when affected-mode produces an empty set'
+    required: false
+    default: 'true'
 outputs:
   scenarios:
     description: 'JSON array of scenario names'
@@ -34,6 +58,9 @@ outputs:
   scenarios-matrix:
     description: 'Ready-to-use matrix JSON for GitHub Actions strategy'
     value: ${{ steps.discover.outputs.scenarios-matrix }}
+  filter-mode:
+    description: 'The effective filter mode used'
+    value: ${{ steps.discover.outputs.filter-mode }}
 runs:
   using: composite
   steps:
@@ -45,9 +72,16 @@ runs:
         EXCLUDE_PATTERNS: ${{ inputs.exclude-patterns }}
         ONLY_PATTERNS: ${{ inputs.only-patterns }}
         INCLUDE_PLATFORM_SPECIFIC: ${{ inputs.include-platform-specific }}
+        FILTER_MODE: ${{ inputs.filter-mode }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        BEFORE_SHA: ${{ inputs.before-sha }}
+        SCENARIO_MAPPING: ${{ inputs.scenario-mapping }}
+        FALLBACK_ALL: ${{ inputs.fallback-all }}
       run: |
         set -euo pipefail
 
+        # Discover all scenarios first
         SCENARIOS_ARRAY=()
         IFS=',' read -ra PATHS <<< "$SEARCH_PATHS"
 
@@ -106,20 +140,142 @@ runs:
           UNIQUE_SCENARIOS=()
         fi
 
+        ALL_SCENARIOS=("${UNIQUE_SCENARIOS[@]}")
+
+        # Affected-mode filtering
+        if [ "$FILTER_MODE" == 'affected' ] && [ ${#ALL_SCENARIOS[@]} -gt 0 ]; then
+          echo "Computing affected scenarios from changed files..."
+
+          BASE="$BASE_SHA"
+          HEAD="$HEAD_SHA"
+          if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+            BASE="$BEFORE_SHA"
+            HEAD="${GITHUB_SHA:-}"
+          fi
+
+          CHANGED_FILES=""
+          if [ -n "$BASE" ] && [ -n "$HEAD" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRTUXB "${BASE}...${HEAD}" 2>/dev/null || true)
+          fi
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed files determined; falling back to all scenarios"
+          else
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+
+            AFFECTED=()
+
+            # Load scenario mapping if provided
+            declare -A SCENARIO_TO_PATTERNS
+            if [ -n "$SCENARIO_MAPPING" ] && [ -f "$SCENARIO_MAPPING" ]; then
+              if command -v yq >/dev/null 2>&1; then
+                for scenario in "${ALL_SCENARIOS[@]}"; do
+                  patterns=$(yq e ".\"$scenario\"[]" "$SCENARIO_MAPPING" 2>/dev/null || true)
+                  if [ -n "$patterns" ]; then
+                    SCENARIO_TO_PATTERNS["$scenario"]="$patterns"
+                  fi
+                done
+              elif command -v python3 >/dev/null 2>&1; then
+                for scenario in "${ALL_SCENARIOS[@]}"; do
+                  patterns=$(python3 -c "import yaml,sys; d=yaml.safe_load(open('$SCENARIO_MAPPING')); print(chr(10).join(d.get('$scenario', [])))" 2>/dev/null || true)
+                  if [ -n "$patterns" ]; then
+                    SCENARIO_TO_PATTERNS["$scenario"]="$patterns"
+                  fi
+                done
+              fi
+            fi
+
+            # Shared paths that should trigger all scenarios
+            SHARED_PATTERNS=(
+              '^galaxy\.yml$'
+              '^meta/'
+              '^plugins/'
+              '^requirements'
+              '^mise\.toml$'
+              '^tox'
+              '^\.github/workflows/'
+              '^collections/'
+            )
+
+            SHARED_CHANGED=false
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              for pattern in "${SHARED_PATTERNS[@]}"; do
+                if echo "$file" | grep -Eq "$pattern"; then
+                  SHARED_CHANGED=true
+                  break 2
+                fi
+              done
+            done <<< "$CHANGED_FILES"
+
+            if [ "$SHARED_CHANGED" == "true" ]; then
+              echo "Shared collection files changed; running all scenarios"
+            else
+              while IFS= read -r file; do
+                [ -n "$file" ] || continue
+
+                for scenario in "${ALL_SCENARIOS[@]}"; do
+                  # Direct scenario file changes
+                  if echo "$file" | grep -Eq "(^|/)(extensions/molecule|molecule)/$scenario/"; then
+                    AFFECTED+=("$scenario")
+                    continue
+                  fi
+
+                  # Mapping-based matches
+                  if [ -n "${SCENARIO_TO_PATTERNS[$scenario]:-}" ]; then
+                    MATCHED=false
+                    while IFS= read -r pattern; do
+                      [ -n "$pattern" ] || continue
+                      if echo "$file" | grep -Eq "$pattern"; then
+                        MATCHED=true
+                        break
+                      fi
+                    done <<< "${SCENARIO_TO_PATTERNS[$scenario]}"
+                    if [ "$MATCHED" == "true" ]; then
+                      AFFECTED+=("$scenario")
+                      continue
+                    fi
+                  fi
+
+                  # Default heuristic: role name matches scenario name
+                  if echo "$file" | grep -Eq "(^|/)roles/$scenario/"; then
+                    AFFECTED+=("$scenario")
+                    continue
+                  fi
+                done
+              done <<< "$CHANGED_FILES"
+
+              if [ ${#AFFECTED[@]} -gt 0 ]; then
+                UNIQUE_AFFECTED=($(printf "%s\n" "${AFFECTED[@]}" | awk '!seen[$0]++'))
+                UNIQUE_SCENARIOS=("${UNIQUE_AFFECTED[@]}")
+              else
+                if [ "$FALLBACK_ALL" == 'true' ]; then
+                  echo "No affected scenarios detected; falling back to all"
+                  UNIQUE_SCENARIOS=("${ALL_SCENARIOS[@]}")
+                else
+                  UNIQUE_SCENARIOS=()
+                fi
+              fi
+            fi
+          fi
+        fi
+
         COUNT=${#UNIQUE_SCENARIOS[@]}
         if [ "$COUNT" -eq 0 ]; then
           echo "scenarios=[]" >> "$GITHUB_OUTPUT"
           echo "count=0" >> "$GITHUB_OUTPUT"
           echo "has-molecule=false" >> "$GITHUB_OUTPUT"
-          echo "scenarios-matrix={"scenario":[]}" >> "$GITHUB_OUTPUT"
+          echo "scenarios-matrix={\"scenario\":[]}" >> "$GITHUB_OUTPUT"
+          echo "filter-mode=$FILTER_MODE" >> "$GITHUB_OUTPUT"
           echo "No molecule scenarios found"
         else
-          # Convert to JSON array
           JSON_ARRAY=$(printf "%s\n" "${UNIQUE_SCENARIOS[@]}" | jq -R . | jq -s -c .)
           MATRIX_JSON=$(echo "$JSON_ARRAY" | jq -c '{scenario: .}')
           echo "scenarios=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "has-molecule=true" >> "$GITHUB_OUTPUT"
           echo "scenarios-matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
+          echo "filter-mode=$FILTER_MODE" >> "$GITHUB_OUTPUT"
           echo "Found $COUNT molecule scenario(s): ${UNIQUE_SCENARIOS[*]}"
         fi
