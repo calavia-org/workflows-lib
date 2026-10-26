@@ -721,6 +721,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
       - id: discover
         uses: $/.github/actions/discover-molecule-scenarios
         with:
