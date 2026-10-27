@@ -46,6 +46,10 @@ jobs:
       security-events: write
       actions: read
     uses: $/.github/workflows/reusable-ci.yml
+    with:
+      integration-python-matrix: '["3.11", "3.12"]'
+      integration-ansible-matrix: '["2.20", "milestone"]'
+      integration-test-command: 'python3 tests/integration-matrix-check.py'
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 

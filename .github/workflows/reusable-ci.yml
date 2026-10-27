@@ -213,6 +213,11 @@ name: CI
         type: string
         required: false
         default: ''
+      integration-ansible-matrix:
+        description: 'JSON array of ansible-core versions for the integration matrix (ansible consumers only)'
+        type: string
+        required: false
+        default: ''
       ansible-collection-path:
         description: 'Path to Ansible collection'
         type: string
@@ -750,23 +755,89 @@ jobs:
           HAS_MOLECULE: ${{ needs.discover-molecule.outputs.has-molecule }}
           SCENARIOS_MATRIX: ${{ needs.discover-molecule.outputs.scenarios-matrix }}
           INTEGRATION_PYTHON_MATRIX: ${{ inputs.integration-python-matrix }}
+          INTEGRATION_ANSIBLE_MATRIX: ${{ inputs.integration-ansible-matrix }}
           PYTHON_MATRIX: ${{ needs.detect.outputs.python-matrix }}
         run: |
           set -euo pipefail
-          if [ -n "$OVERRIDE" ]; then
-            echo "matrix=$OVERRIDE" >> "$GITHUB_OUTPUT"
-            echo "Using override matrix: $OVERRIDE"
-          elif [ "$RUN_PARALLEL" == 'true' ] && [ "$HAS_MOLECULE" == 'true' ] && [ "$SCENARIOS_MATRIX" != '{"scenario":[]}' ]; then
-            echo "matrix=$SCENARIOS_MATRIX" >> "$GITHUB_OUTPUT"
-            echo "Using molecule scenario matrix: $SCENARIOS_MATRIX"
-          else
-            PY_MATRIX="$PYTHON_MATRIX"
+
+          build_dimensions() {
+            local dims='{}'
             if [ -n "$INTEGRATION_PYTHON_MATRIX" ]; then
-              PY_MATRIX="$INTEGRATION_PYTHON_MATRIX"
+              dims="{\"python-version\": $INTEGRATION_PYTHON_MATRIX}"
             fi
-            MATRIX=$(echo "$PY_MATRIX" | jq -c '{"python-version": .}')
-            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-            echo "Using python matrix: $MATRIX"
+            if [ -n "$INTEGRATION_ANSIBLE_MATRIX" ]; then
+              dims=$(printf '%s\n%s' "$dims" "$INTEGRATION_ANSIBLE_MATRIX" | jq -s '.[0] * {("ansible-core"): .[1]}')
+            fi
+            printf '%s\n' "$dims"
+          }
+
+          combine_with_scenarios() {
+            local dims="$1"
+            local scenarios="$2"
+            echo "$dims" "$scenarios" | jq -s '
+              .[0] as $dims |
+              .[1].scenario as $scenarios |
+              ($dims | keys) as $keys |
+              {
+                include: [
+                  $scenarios[] as $scenario |
+                  ([$dims[$keys[]]] | combinations) as $values |
+                  {scenario: $scenario} + (
+                    [range($keys | length)] | map({($keys[.]): $values[.]}) | add
+                  )
+                ]
+              }
+            '
+          }
+
+          combine_dimensions() {
+            local dims="$1"
+            echo "$dims" | jq '
+              keys as $keys |
+              {
+                include: [
+                  ([.[$keys[]]] | combinations) as $values |
+                  [range($keys | length)] | map({($keys[.]): $values[.]}) | add
+                ]
+              }
+            '
+          }
+
+          emit_matrix() {
+            local value="$1"
+            {
+              echo "matrix<<GITHUB_OUTPUT_EOF"
+              echo "$value"
+              echo "GITHUB_OUTPUT_EOF"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          if [ -n "$OVERRIDE" ]; then
+            emit_matrix "$OVERRIDE"
+            echo "Using override matrix: $OVERRIDE"
+          else
+            DIMENSIONS=$(build_dimensions)
+
+            if [ "$RUN_PARALLEL" == 'true' ] && [ "$HAS_MOLECULE" == 'true' ] && [ "$SCENARIOS_MATRIX" != '{"scenario":[]}' ]; then
+              if [ "$DIMENSIONS" == '{}' ]; then
+                emit_matrix "$SCENARIOS_MATRIX"
+                echo "Using molecule scenario matrix: $SCENARIOS_MATRIX"
+              else
+                MATRIX=$(combine_with_scenarios "$DIMENSIONS" "$SCENARIOS_MATRIX")
+                emit_matrix "$MATRIX"
+                echo "Using molecule scenario + dimension matrix: $MATRIX"
+              fi
+            else
+              if [ "$DIMENSIONS" == '{}' ]; then
+                MATRIX=$(echo "$PYTHON_MATRIX" | jq -c '{"python-version": .}')
+                emit_matrix "$MATRIX"
+                echo "Using python matrix: $MATRIX"
+              else
+                MATRIX=$(combine_dimensions "$DIMENSIONS")
+                emit_matrix "$MATRIX"
+                echo "Using dimension matrix: $MATRIX"
+              fi
+            fi
           fi
 
   integration:
@@ -779,6 +850,10 @@ jobs:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
       matrix: ${{ fromJSON(needs.integration-plan.outputs.matrix) }}
+    env:
+      MATRIX_PYTHON_VERSION: ${{ matrix.python-version }}
+      MATRIX_ANSIBLE_CORE: ${{ matrix.ansible-core }}
+      MATRIX_SCENARIO: ${{ matrix.scenario }}
     steps:
       - uses: actions/checkout@v7
         with:
