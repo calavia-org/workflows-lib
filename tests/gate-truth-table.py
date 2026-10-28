@@ -70,8 +70,6 @@ def eval_if(cond, results, inputs, base_ref, event_name, *, detect_outputs=None)
         lambda m: repr(results.get(m.group(1), "")),
         e,
     )
-    # Model detect outputs used by discover-molecule. Default to a non-ansible
-    # repo so molecule discovery is skipped and the test focuses on gate logic.
     detect_outputs = detect_outputs or {
         "primary": "python",
         "technologies": "python",
@@ -162,9 +160,8 @@ def main():
     expected = {
         "unit": ["detect", "build"],
         "package": ["detect", "build"],
-        "discover-molecule": ["detect"],
-        "integration-plan": ["detect", "discover-molecule"],
-        "integration": ["detect", "package", "discover-molecule", "integration-plan"],
+        "integration-matrix": ["detect"],
+        "integration": ["detect", "package", "integration-matrix"],
         "security": ["detect"],
         "dependency-review": [],
         "report": [

@@ -120,14 +120,44 @@ The workflow auto-detects version from (in priority order):
 7. `setup.py` (Python)
 8. `VERSION` or `version.txt` (Generic)
 
+## Testing Before Release
+
+When `run-tests: true` the workflow separates unit and integration testing:
+
+- **Unit tests** run once via `test-command`.
+- **Integration tests** fan out through the same `reusable-integration-matrix.yml` used by the CI workflow, so a consumer can test the same scenario × Python × ansible-core matrix during release that it already validated in PRs.
+
+Integration matrix inputs (all optional):
+
+| Input | Purpose |
+|-------|---------|
+| `integration-python-matrix` | JSON array of Python versions for integration legs |
+| `integration-ansible-matrix` | JSON array of ansible-core versions (Ansible consumers) |
+| `molecule-search-paths` | Comma-separated paths to discover molecule scenarios |
+| `molecule-scenarios-matrix` | JSON array to override the discovered scenario matrix |
+| `molecule-scenario-filter-mode` | `all` or `affected` (same semantics as CI) |
+| `molecule-scenario-mapping` | Optional scenario → role/pattern mapping file |
+| `molecule-affected-fallback-all` | Fall back to all scenarios when affected mode finds none |
+
+The integration command template receives the matrix values in environment variables:
+
+- `MATRIX_PYTHON_VERSION`
+- `MATRIX_ANSIBLE_CORE`
+- `MATRIX_SCENARIO`
+
 ## Artifact Dependencies
 
-Builds execute sequentially:
+Builds execute sequentially after tests succeed:
 
 ```text
-build-binary
-  └── build-docker (needs build-binary)
-        └── build-helm (needs build-docker)
+detect
+  ├── unit
+  ├── integration-matrix → integration
+  ├── build-binary
+  │     ├── build-docker
+  │     │     └── build-helm
+  │     └── sign-binary
+  └── ...
 ```
 
 ## Publish Targets
