@@ -306,7 +306,7 @@ jobs:
   integration-matrix:
     name: Integration Matrix
     needs: detect
-    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' }}
+    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' && needs.detect.result == 'success' }}
     uses: $/.github/workflows/reusable-integration-matrix.yml
     with:
       runner-label: ${{ inputs.runner-label }}
@@ -331,9 +331,15 @@ jobs:
     needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-tests && inputs.test-command != '' }}
+    if: ${{ always() && inputs.run-tests && (needs.detect.result == 'success') }}
     steps:
       - uses: actions/checkout@v7
+      - name: Validate test commands
+        if: ${{ inputs.test-command == '' && inputs.integration-test-command == '' }}
+        shell: bash
+        run: |
+          echo "::error::run-tests is true but neither test-command nor integration-test-command is set"
+          exit 1
       - uses: $/.github/actions/run-tests
         with:
           technology: ${{ needs.detect.outputs.technology || inputs.technology }}
@@ -343,15 +349,16 @@ jobs:
           coverage-report: false
           test-report-format: junit
           cache-enabled: true
-          run-unit-tests: true
+          run-unit-tests: ${{ inputs.test-command != '' }}
           run-integration-tests: false
+          report-artifact-suffix: unit
 
   integration:
     name: Integration Test
     needs: [detect, integration-matrix]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' && (needs.integration-matrix.result == 'success' || needs.integration-matrix.result == 'skipped') }}
+    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' && needs.detect.result == 'success' && needs.integration-matrix.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.integration-matrix.outputs.matrix) }}
@@ -364,6 +371,7 @@ jobs:
       - uses: $/.github/actions/run-tests
         with:
           technology: ${{ needs.detect.outputs.technology || inputs.technology }}
+          test-command: ${{ inputs.integration-test-command }}
           integration-test-command: ${{ inputs.integration-test-command }}
           tox-ini: ${{ inputs.tox-ini }}
           python-version: ${{ matrix.python-version || inputs.python-version }}
@@ -373,13 +381,14 @@ jobs:
           run-unit-tests: false
           run-integration-tests: true
           molecule-scenario: ${{ matrix.scenario || '' }}
+          report-artifact-suffix: integration-${{ matrix.python-version }}-${{ matrix.ansible-core }}-${{ matrix.scenario }}
 
   build-binary:
     name: Build Binary
     needs: [detect, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'binary') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
+    if: ${{ always() && needs.detect.result == 'success' && contains(needs.detect.outputs.artifacts, 'binary') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     outputs:
       artifact-path: ${{ steps.build.outputs.artifact-path }}
       artifact-name: ${{ steps.build.outputs.artifact-name }}
