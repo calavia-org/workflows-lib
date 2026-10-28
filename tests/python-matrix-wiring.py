@@ -22,6 +22,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 CI = REPO / ".github/workflows/reusable-ci.yml"
+MATRIX = REPO / ".github/workflows/reusable-integration-matrix.yml"
 ACTION = REPO / ".github/actions/run-tests/action.yml"
 INSTALL_STEP = "Install tox"
 EXPRESSION = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
@@ -30,6 +31,10 @@ STUB = '#!/usr/bin/env bash\necho "$@" >> invocation.txt\n'
 
 def jobs() -> dict:
     return yaml.safe_load(CI.read_text())["jobs"]
+
+
+def matrix_jobs() -> dict:
+    return yaml.safe_load(MATRIX.read_text())["jobs"]
 
 
 def detect_job() -> dict:
@@ -121,21 +126,34 @@ def test_integration_matrix_input_is_opt_in_pin():
 
 def test_integration_matrix_is_planned():
     matrix = jobs()["integration"]["strategy"]["matrix"]
-    assert matrix == "${{ fromJSON(needs.integration-plan.outputs.matrix) }}", (
-        "integration must expand from the integration-plan job so molecule "
-        "scenarios can override the python matrix without complex inline "
-        f"expressions; matrix: {matrix}"
+    assert matrix == "${{ fromJSON(needs.integration-matrix.outputs.matrix) }}", (
+        "integration must expand from the integration-matrix reusable workflow "
+        "so molecule scenarios can override the python matrix without complex "
+        f"inline expressions; matrix: {matrix}"
+    )
+
+
+def test_integration_matrix_job_forwards_detect_output():
+    call = jobs()["integration-matrix"]
+    assert call.get("uses", "").endswith("reusable-integration-matrix.yml"), (
+        "integration-matrix must delegate matrix generation to the reusable "
+        f"workflow; got: {call.get('uses')}"
+    )
+    with_ = call.get("with", {})
+    assert with_.get("python-matrix") == "${{ needs.detect.outputs.python-matrix }}", (
+        "integration-matrix must forward the detect python matrix to the "
+        f"reusable workflow; with: {with_}"
     )
 
 
 def test_integration_plan_falls_back_to_detect_output():
-    plan = jobs()["integration-plan"]
+    plan = matrix_jobs()["integration-plan"]
     step = next(s for s in plan["steps"] if s.get("id") == "matrix")
     env = step.get("env", {})
     run = step["run"]
-    assert env.get("PYTHON_MATRIX") == "${{ needs.detect.outputs.python-matrix }}", (
-        "integration-plan must receive the detect python matrix as input "
-        f"env; env: {env}"
+    assert env.get("PYTHON_MATRIX") == "${{ inputs.python-matrix }}", (
+        "integration-plan must receive the detect python matrix as workflow "
+        f"input; env: {env}"
     )
     assert "INTEGRATION_PYTHON_MATRIX" in env, (
         f"integration-plan must receive the consumer python matrix pin; env: {env}"

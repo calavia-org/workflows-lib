@@ -711,145 +711,39 @@ jobs:
   # heavy tier (molecule/Docker), and because they usually dominate the
   # critical path, overlapping them with the other tiers is what keeps the
   # whole run close to the duration of integration alone.
-  discover-molecule:
-    name: Discover Molecule Scenarios
+  integration-matrix:
+    name: Integration Matrix
     needs: [detect]
-    runs-on: ${{ inputs.runner-label }}
-    timeout-minutes: 5
-    if: ${{ always() && inputs.run-integration-tests && inputs.run-molecule-parallel && (needs.detect.outputs.primary == 'ansible' || needs.detect.outputs.technologies == 'ansible-collection' || contains(needs.detect.outputs.technologies, 'ansible')) }}
-    outputs:
-      scenarios: ${{ steps.discover.outputs.scenarios }}
-      count: ${{ steps.discover.outputs.count }}
-      has-molecule: ${{ steps.discover.outputs.has-molecule }}
-      scenarios-matrix: ${{ steps.discover.outputs.scenarios-matrix }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - id: discover
-        uses: $/.github/actions/discover-molecule-scenarios
-        with:
-          search-paths: ${{ inputs.molecule-search-paths }}
-          filter-mode: ${{ inputs.molecule-scenario-filter-mode }}
-          scenario-mapping: ${{ inputs.molecule-scenario-mapping }}
-          fallback-all: ${{ inputs.molecule-affected-fallback-all }}
-          base-sha: ${{ github.event.pull_request.base.sha }}
-          head-sha: ${{ github.event.pull_request.head.sha }}
-          before-sha: ${{ github.event.before }}
-
-  integration-plan:
-    name: Integration Test Plan
-    needs: [detect, discover-molecule]
-    runs-on: ${{ inputs.runner-label }}
-    timeout-minutes: 5
-    if: ${{ always() && inputs.run-integration-tests && (needs.discover-molecule.result == 'success' || needs.discover-molecule.result == 'skipped') }}
-    outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-    steps:
-      - id: matrix
-        shell: bash
-        env:
-          OVERRIDE: ${{ inputs.molecule-scenarios-matrix }}
-          RUN_PARALLEL: ${{ inputs.run-molecule-parallel }}
-          HAS_MOLECULE: ${{ needs.discover-molecule.outputs.has-molecule }}
-          SCENARIOS_MATRIX: ${{ needs.discover-molecule.outputs.scenarios-matrix }}
-          INTEGRATION_PYTHON_MATRIX: ${{ inputs.integration-python-matrix }}
-          INTEGRATION_ANSIBLE_MATRIX: ${{ inputs.integration-ansible-matrix }}
-          PYTHON_MATRIX: ${{ needs.detect.outputs.python-matrix }}
-        run: |
-          set -euo pipefail
-
-          build_dimensions() {
-            local dims='{}'
-            if [ -n "$INTEGRATION_PYTHON_MATRIX" ]; then
-              dims="{\"python-version\": $INTEGRATION_PYTHON_MATRIX}"
-            fi
-            if [ -n "$INTEGRATION_ANSIBLE_MATRIX" ]; then
-              dims=$(printf '%s\n%s' "$dims" "$INTEGRATION_ANSIBLE_MATRIX" | jq -s '.[0] * {("ansible-core"): .[1]}')
-            fi
-            printf '%s\n' "$dims"
-          }
-
-          combine_with_scenarios() {
-            local dims="$1"
-            local scenarios="$2"
-            echo "$dims" "$scenarios" | jq -s '
-              .[0] as $dims |
-              .[1].scenario as $scenarios |
-              ($dims | keys) as $keys |
-              {
-                include: [
-                  $scenarios[] as $scenario |
-                  ([$dims[$keys[]]] | combinations) as $values |
-                  {scenario: $scenario} + (
-                    [range($keys | length)] | map({($keys[.]): $values[.]}) | add
-                  )
-                ]
-              }
-            '
-          }
-
-          combine_dimensions() {
-            local dims="$1"
-            echo "$dims" | jq '
-              keys as $keys |
-              {
-                include: [
-                  ([.[$keys[]]] | combinations) as $values |
-                  [range($keys | length)] | map({($keys[.]): $values[.]}) | add
-                ]
-              }
-            '
-          }
-
-          emit_matrix() {
-            local value="$1"
-            {
-              echo "matrix<<GITHUB_OUTPUT_EOF"
-              echo "$value"
-              echo "GITHUB_OUTPUT_EOF"
-            } >> "$GITHUB_OUTPUT"
-          }
-
-          if [ -n "$OVERRIDE" ]; then
-            emit_matrix "$OVERRIDE"
-            echo "Using override matrix: $OVERRIDE"
-          else
-            DIMENSIONS=$(build_dimensions)
-
-            if [ "$RUN_PARALLEL" == 'true' ] && [ "$HAS_MOLECULE" == 'true' ] && [ "$SCENARIOS_MATRIX" != '{"scenario":[]}' ]; then
-              if [ "$DIMENSIONS" == '{}' ]; then
-                emit_matrix "$SCENARIOS_MATRIX"
-                echo "Using molecule scenario matrix: $SCENARIOS_MATRIX"
-              else
-                MATRIX=$(combine_with_scenarios "$DIMENSIONS" "$SCENARIOS_MATRIX")
-                emit_matrix "$MATRIX"
-                echo "Using molecule scenario + dimension matrix: $MATRIX"
-              fi
-            else
-              if [ "$DIMENSIONS" == '{}' ]; then
-                MATRIX=$(echo "$PYTHON_MATRIX" | jq -c '{"python-version": .}')
-                emit_matrix "$MATRIX"
-                echo "Using python matrix: $MATRIX"
-              else
-                MATRIX=$(combine_dimensions "$DIMENSIONS")
-                emit_matrix "$MATRIX"
-                echo "Using dimension matrix: $MATRIX"
-              fi
-            fi
-          fi
+    if: ${{ always() && inputs.run-integration-tests }}
+    uses: $/.github/workflows/reusable-integration-matrix.yml
+    with:
+      runner-label: ${{ inputs.runner-label }}
+      run-integration-tests: ${{ inputs.run-integration-tests }}
+      run-molecule-parallel: ${{ inputs.run-molecule-parallel }}
+      molecule-search-paths: ${{ inputs.molecule-search-paths }}
+      molecule-scenarios-matrix: ${{ inputs.molecule-scenarios-matrix }}
+      molecule-scenario-filter-mode: ${{ inputs.molecule-scenario-filter-mode }}
+      molecule-scenario-mapping: ${{ inputs.molecule-scenario-mapping }}
+      molecule-affected-fallback-all: ${{ inputs.molecule-affected-fallback-all }}
+      integration-python-matrix: ${{ inputs.integration-python-matrix }}
+      integration-ansible-matrix: ${{ inputs.integration-ansible-matrix }}
+      python-matrix: ${{ needs.detect.outputs.python-matrix }}
+      primary: ${{ needs.detect.outputs.primary }}
+      technologies: ${{ needs.detect.outputs.technologies }}
+      base-sha: ${{ github.event.pull_request.base.sha }}
+      head-sha: ${{ github.event.pull_request.head.sha }}
+      before-sha: ${{ github.event.before }}
 
   integration:
     name: Integration Test
-    needs: [detect, package, discover-molecule, integration-plan]
+    needs: [detect, package, integration-matrix]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.integration-plan.result == 'success' || needs.integration-plan.result == 'skipped') }}
+    if: ${{ always() && inputs.run-integration-tests && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.integration-matrix.result == 'success' || needs.integration-matrix.result == 'skipped') }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ fromJSON(inputs.max-parallel) }}
-      matrix: ${{ fromJSON(needs.integration-plan.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.integration-matrix.outputs.matrix) }}
     env:
       MATRIX_PYTHON_VERSION: ${{ matrix.python-version }}
       MATRIX_ANSIBLE_CORE: ${{ matrix.ansible-core }}

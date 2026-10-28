@@ -194,15 +194,50 @@ on:
         required: false
         default: false
       test-command:
-        description: 'Test command to run'
+        description: 'Unit test command to run'
         type: string
         required: false
         default: ''
       integration-test-command:
-        description: 'Integration test command to run'
+        description: 'Integration test command template; may reference MATRIX_PYTHON_VERSION, MATRIX_ANSIBLE_CORE, and MATRIX_SCENARIO env vars'
         type: string
         required: false
         default: ''
+      integration-python-matrix:
+        description: 'JSON array of Python versions for the integration matrix'
+        type: string
+        required: false
+        default: ''
+      integration-ansible-matrix:
+        description: 'JSON array of ansible-core versions for the integration matrix (ansible consumers only)'
+        type: string
+        required: false
+        default: ''
+      molecule-search-paths:
+        description: 'Comma-separated paths to search for molecule scenarios'
+        type: string
+        required: false
+        default: 'extensions/molecule,molecule'
+      molecule-scenarios-matrix:
+        description: 'JSON array to override molecule scenarios matrix'
+        type: string
+        required: false
+        default: ''
+      molecule-scenario-filter-mode:
+        description: 'all = full scenario matrix; affected = only scenarios touched by PR changes'
+        type: string
+        required: false
+        default: 'all'
+      molecule-scenario-mapping:
+        description: 'Optional path to a JSON/YAML mapping of scenario -> role/pattern list'
+        type: string
+        required: false
+        default: ''
+      molecule-affected-fallback-all:
+        description: 'Return all scenarios when affected-mode cannot determine any affected scenario'
+        type: boolean
+        required: false
+        default: true
       tox-ini:
         description: 'Path to tox.ini file'
         type: string
@@ -249,6 +284,7 @@ jobs:
       technology: ${{ steps.version.outputs.technology }}
       artifacts: ${{ steps.artifacts.outputs.artifacts }}
       binary-type: ${{ steps.artifacts.outputs.binary-type }}
+      python-matrix: ${{ steps.technology.outputs.python-matrix }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -261,13 +297,41 @@ jobs:
         id: artifacts
         with:
           artifacts: ${{ inputs.artifacts }}
+      - uses: $/.github/actions/detect-technology
+        id: technology
+        with:
+          tox-ini: ${{ inputs.tox-ini }}
+          python-version: ${{ inputs.python-version }}
 
-  test:
-    name: Test
+  integration-matrix:
+    name: Integration Matrix
+    needs: detect
+    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' && needs.detect.result == 'success' }}
+    uses: $/.github/workflows/reusable-integration-matrix.yml
+    with:
+      runner-label: ${{ inputs.runner-label }}
+      run-integration-tests: true
+      run-molecule-parallel: true
+      molecule-search-paths: ${{ inputs.molecule-search-paths }}
+      molecule-scenarios-matrix: ${{ inputs.molecule-scenarios-matrix }}
+      molecule-scenario-filter-mode: ${{ inputs.molecule-scenario-filter-mode }}
+      molecule-scenario-mapping: ${{ inputs.molecule-scenario-mapping }}
+      molecule-affected-fallback-all: ${{ inputs.molecule-affected-fallback-all }}
+      integration-python-matrix: ${{ inputs.integration-python-matrix }}
+      integration-ansible-matrix: ${{ inputs.integration-ansible-matrix }}
+      python-matrix: ${{ needs.detect.outputs.python-matrix }}
+      primary: ${{ needs.detect.outputs.technology || inputs.technology }}
+      technologies: ${{ needs.detect.outputs.technology || inputs.technology }}
+      base-sha: ${{ github.event.pull_request.base.sha }}
+      head-sha: ${{ github.event.pull_request.head.sha }}
+      before-sha: ${{ github.event.before }}
+
+  unit:
+    name: Unit Test
     needs: detect
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ inputs.run-tests }}
+    if: ${{ always() && inputs.run-tests && (needs.detect.result == 'success') }}
     steps:
       - uses: actions/checkout@v7
       - name: Validate test commands
@@ -280,21 +344,51 @@ jobs:
         with:
           technology: ${{ needs.detect.outputs.technology || inputs.technology }}
           test-command: ${{ inputs.test-command }}
-          integration-test-command: ${{ inputs.integration-test-command }}
           tox-ini: ${{ inputs.tox-ini }}
           python-version: ${{ inputs.python-version }}
           coverage-report: false
           test-report-format: junit
           cache-enabled: true
           run-unit-tests: ${{ inputs.test-command != '' }}
-          run-integration-tests: ${{ inputs.integration-test-command != '' }}
+          run-integration-tests: false
+          report-artifact-suffix: unit
+
+  integration:
+    name: Integration Test
+    needs: [detect, integration-matrix]
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    if: ${{ always() && inputs.run-tests && inputs.integration-test-command != '' && needs.detect.result == 'success' && needs.integration-matrix.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.integration-matrix.outputs.matrix) }}
+    env:
+      MATRIX_PYTHON_VERSION: ${{ matrix.python-version }}
+      MATRIX_ANSIBLE_CORE: ${{ matrix.ansible-core }}
+      MATRIX_SCENARIO: ${{ matrix.scenario }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: $/.github/actions/run-tests
+        with:
+          technology: ${{ needs.detect.outputs.technology || inputs.technology }}
+          test-command: ${{ inputs.integration-test-command }}
+          integration-test-command: ${{ inputs.integration-test-command }}
+          tox-ini: ${{ inputs.tox-ini }}
+          python-version: ${{ matrix.python-version || inputs.python-version }}
+          coverage-report: false
+          test-report-format: junit
+          cache-enabled: true
+          run-unit-tests: false
+          run-integration-tests: true
+          molecule-scenario: ${{ matrix.scenario || '' }}
+          report-artifact-suffix: integration-${{ matrix.python-version }}-${{ matrix.ansible-core }}-${{ matrix.scenario }}
 
   build-binary:
     name: Build Binary
-    needs: [detect, test]
+    needs: [detect, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'binary') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ always() && needs.detect.result == 'success' && contains(needs.detect.outputs.artifacts, 'binary') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     outputs:
       artifact-path: ${{ steps.build.outputs.artifact-path }}
       artifact-name: ${{ steps.build.outputs.artifact-name }}
@@ -315,10 +409,10 @@ jobs:
 
   build-docker:
     name: Build Docker
-    needs: [detect, build-binary, test]
+    needs: [detect, build-binary, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'docker') && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'docker') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     outputs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
@@ -333,10 +427,10 @@ jobs:
 
   build-ee:
     name: Build Execution Environment
-    needs: [detect, build-binary, test]
+    needs: [detect, build-binary, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'execution-environment') && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'execution-environment') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') }}
     outputs:
       image-tag: ${{ steps.build.outputs.image-tag }}
       image-name: ${{ steps.build.outputs.image-name }}
@@ -352,10 +446,10 @@ jobs:
 
   build-helm:
     name: Build Helm
-    needs: [detect, build-docker, build-ee, test]
+    needs: [detect, build-docker, build-ee, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ contains(needs.detect.outputs.artifacts, 'helm') && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     outputs:
       chart-path: ${{ steps.build.outputs.chart-path }}
       chart-name: ${{ steps.build.outputs.chart-name }}
@@ -372,10 +466,10 @@ jobs:
 
   sign-binary:
     name: Sign Binary
-    needs: [detect, build-binary, test]
+    needs: [detect, build-binary, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-binary && contains(needs.detect.outputs.artifacts, 'binary') && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-binary
@@ -386,10 +480,10 @@ jobs:
 
   sign-docker:
     name: Sign Container
-    needs: [detect, build-docker, build-ee, test]
+    needs: [detect, build-docker, build-ee, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-docker && always() && needs.detect.result == 'success' && (contains(needs.detect.outputs.artifacts, 'docker') || contains(needs.detect.outputs.artifacts, 'execution-environment')) && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-docker
@@ -399,10 +493,10 @@ jobs:
 
   sign-helm:
     name: Sign Helm
-    needs: [detect, build-helm, test]
+    needs: [detect, build-helm, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.sign-artifacts && inputs.sign-helm && contains(needs.detect.outputs.artifacts, 'helm') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
       - uses: $/.github/actions/sign-helm
@@ -413,10 +507,10 @@ jobs:
 
   publish-github-release:
     name: Publish GitHub Release
-    needs: [detect, build-binary, build-docker, build-ee, build-helm, sign-binary, sign-docker, sign-helm, test]
+    needs: [detect, build-binary, build-docker, build-ee, build-helm, sign-binary, sign-docker, sign-helm, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.publish-github-release && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.build-docker.result == 'success' || needs.build-docker.result == 'skipped') && (needs.build-ee.result == 'success' || needs.build-ee.result == 'skipped') && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     outputs:
       release-url: ${{ steps.publish.outputs.release-url }}
       release-id: ${{ steps.publish.outputs.release-id }}
@@ -469,10 +563,10 @@ jobs:
 
   publish-ghcr:
     name: Publish to GHCR
-    needs: [detect, build-docker, build-ee, sign-docker, test]
+    needs: [detect, build-docker, build-ee, sign-docker, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-ee.result == 'success') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.publish-ghcr && always() && needs.detect.result == 'success' && (needs.build-docker.result == 'success' || needs.build-ee.result == 'success') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: $/.github/actions/publish-ghcr
         with:
@@ -482,10 +576,10 @@ jobs:
 
   publish-package:
     name: Publish Package
-    needs: [detect, build-binary, sign-binary, test]
+    needs: [detect, build-binary, sign-binary, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.publish-package-manager && always() && needs.detect.result == 'success' && (needs.build-binary.result == 'success' || needs.build-binary.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
       - uses: $/.github/actions/publish-package
@@ -498,10 +592,10 @@ jobs:
 
   publish-helm:
     name: Publish Helm
-    needs: [detect, build-helm, sign-helm, test]
+    needs: [detect, build-helm, sign-helm, unit, integration]
     runs-on: ${{ inputs.runner-label }}
     timeout-minutes: 10
-    if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    if: ${{ inputs.publish-helm-chart && always() && needs.detect.result == 'success' && (needs.build-helm.result == 'success' || needs.build-helm.result == 'skipped') && (needs.unit.result == 'success' || needs.unit.result == 'skipped') && (needs.integration.result == 'success' || needs.integration.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v7
       - uses: $/.github/actions/publish-helm
